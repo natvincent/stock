@@ -88,6 +88,9 @@
 			<defines>
 				<define name="CI" />
  			</defines> 
+ 			<warnings>
+ 				<warning name="DUPLICATE_CTOR_DTOR" enabled="false" />
+ 			</warnings>
 		</dcc>
 
 		<dcc source="stock.dpr" 

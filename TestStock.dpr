@@ -11,8 +11,13 @@ uses
   DUnitX.Loggers.Console,
   DUnitX.Loggers.Xml.NUnit,
   DUnitX.TestFramework,
-  TestContextLibrary in 'Tests\TestContextLibrary.pas',
-  Persistence.Query in 'Source\Persistence.Query.pas';
+  TestPersistence in 'Tests\TestPersistence.pas',
+  Persistence.FireDac.SQLite in 'Source\Persistence.FireDac.SQLite.pas',
+  Persistence.Interfaces in 'Source\Persistence.Interfaces.pas',
+  Persistence.Types in 'Source\Persistence.Types.pas',
+  Persistence.DB in 'Source\Persistence.DB.pas',
+  Persistence.ConnectionFactory in 'Source\Persistence.ConnectionFactory.pas',
+  Persistence.Context in 'Source\Persistence.Context.pas';
 
 var
   runner : ITestRunner;
