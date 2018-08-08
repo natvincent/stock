@@ -12,7 +12,7 @@ uses
   DUnitX.Loggers.Xml.NUnit,
   DUnitX.TestFramework,
   TestContextLibrary in 'Tests\TestContextLibrary.pas',
-  Context in 'Source\Context.pas';
+  Persistence.Query in 'Source\Persistence.Query.pas';
 
 var
   runner : ITestRunner;
