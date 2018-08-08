@@ -1,0 +1,24 @@
+LANGUAGE             0, SUBLANG_NEUTRAL
+1                    VERSIONINFO
+FILEVERSION          0,1,0,0
+PRODUCTVERSION       0,1,0,0
+FILEFLAGSMASK        0x00L
+FILEFLAGS            0x00L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904e4"
+        BEGIN
+            VALUE "CompanyName",       "Natalie Vincent\0"
+            VALUE "FileDescription",   "Stock Programming Challenge\0"
+            VALUE "FileVersion",       "Internal build\0"
+            VALUE "LegalCopyright",    "Copyright © Natalie Vincent 2018\0"
+            VALUE "ProductName",       "Stock\0"
+            VALUE "ProductVersion",    "Internal build\0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409 0x04E4
+    END
+END

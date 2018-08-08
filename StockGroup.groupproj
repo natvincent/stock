@@ -1,0 +1,48 @@
+﻿<Project xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+    <PropertyGroup>
+        <ProjectGuid>{B7FA4448-5912-41A7-9D53-2DE8B1DD290F}</ProjectGuid>
+    </PropertyGroup>
+    <ItemGroup>
+        <Projects Include="TestStock.dproj">
+            <Dependencies/>
+        </Projects>
+        <Projects Include="Stock.dproj">
+            <Dependencies/>
+        </Projects>
+    </ItemGroup>
+    <ProjectExtensions>
+        <Borland.Personality>Default.Personality.12</Borland.Personality>
+        <Borland.ProjectType/>
+        <BorlandProject>
+            <Default.Personality/>
+        </BorlandProject>
+    </ProjectExtensions>
+    <Target Name="TestStock">
+        <MSBuild Projects="TestStock.dproj"/>
+    </Target>
+    <Target Name="TestStock:Clean">
+        <MSBuild Projects="TestStock.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="TestStock:Make">
+        <MSBuild Projects="TestStock.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Stock">
+        <MSBuild Projects="Stock.dproj"/>
+    </Target>
+    <Target Name="Stock:Clean">
+        <MSBuild Projects="Stock.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="Stock:Make">
+        <MSBuild Projects="Stock.dproj" Targets="Make"/>
+    </Target>
+    <Target Name="Build">
+        <CallTarget Targets="TestStock;Stock"/>
+    </Target>
+    <Target Name="Clean">
+        <CallTarget Targets="TestStock:Clean;Stock:Clean"/>
+    </Target>
+    <Target Name="Make">
+        <CallTarget Targets="TestStock:Make;Stock:Make"/>
+    </Target>
+    <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
+</Project>

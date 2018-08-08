@@ -1,0 +1,135 @@
+<project name="Stock" default="build" basedir=".\">
+
+	<property name="exe-output-directory" value=".\Win32\Release\" />
+	<property name="dcu-output-directory" value=".\Win32\Release\dcus" />
+
+	<property name="major-version" value="0" />
+	<property name="minor-version" value="1" />
+	<property name="release" value="0" />
+
+	<if test="${property::exists('build.number')}">
+		<property name="build" value="${build.number}" />
+		<echo>
+		##teamcity[buildNumber '${major-version}.${minor-version}.${release}.${build}']
+		</echo>
+	</if>
+
+    <if test="${not property::exists('build')}">
+		<property name="build" value="0" />
+		<property name="special-build" value="Internal build" />
+	</if>
+
+	<echo>Building ${project::get-name()} ${major-version}.${minor-version}.${release}.${build} in ${project::get-base-directory()}</echo>
+
+	<unitpath id="lib">
+		<pathelement dir="lib\Delphi-Mocks\"/>
+		<pathelement dir="lib\Virtual-TreeView\Source\"/>
+	</unitpath>
+
+	<target name="build" depends="clean, compile, test"/>
+
+	<target name="clean">
+		<echo>Cleaning build files</echo>
+		<delete dir="${exe-output-directory}"/>
+		<delete dir="${dcu-output-directory}"/>
+		<mkdir dir="${exe-output-directory}" />
+		<mkdir dir="${dcu-output-directory}" />
+	</target>
+
+	<target name="compile" depends="clean">
+		
+		<buildresource file="stock.res">
+			<versioninfo
+					 productname="Stock"
+	                 companyname="Natalie Vincent"
+	                 copyright="Copyright © Natalie Vincent ${datetime::get-year(datetime::now())}"
+	                 description="Stock Programming Challenge">
+	      		<productversion major="${major-version}" minor="${minor-version}" release="${release}" build="${build}" text="${special-build}"/>
+	    		<fileversion major="${major-version}" minor="${minor-version}" release="${release}" build="${build}" text="${special-build}"/>
+			</versioninfo>
+			<!--resource name="MAINICON" type="ICON" file="stock.ico" /-->
+			<!--resource name="1" type="CUSTOM" customtype="24" file="stock.manifest" /-->
+		</buildresource>
+		
+		<dcc source="teststock.dpr" 
+				version="tokyo" 
+				writecfg="true" 
+				console="false" 
+				debuginfo="exe" 
+				exeoutput="${exe-output-directory}" 
+				dcuoutput="${dcu-output-directory}" 
+				build="true" 
+				mapfile="detailed">
+			<compileroptions>
+			  <option name="L" value="False"/>
+			  <option name="D" value="True"/>
+			  <option name="Y" value="False"/>
+			  <option name="O" value="True"/>
+			  <option name="W" value="True"/>
+			  <option name="C" value="True"/>
+			</compileroptions>
+			<unitpath includedelphilib="true">
+				<path refid="lib" />
+			</unitpath>
+			<namespaces>
+				<namespace name="Vcl"/>
+				<namespace name="System"/>
+				<namespace name="Winapi"/>
+				<namespace name="System.Win"/>
+				<namespace name="Data"/>
+				<namespace name="Datasnap"/>
+				<namespace name="Vcl.Imaging"/>
+				<namespace name="Xml"/>
+				<namespace name="Soap"/>
+				<namespace name="Vcl.Samples"/>
+				<namespace name="VclTee"/>
+				<namespace name="IBX"/>
+			</namespaces>
+			<defines>
+				<define name="CI" />
+ 			</defines> 
+		</dcc>
+
+		<dcc source="stock.dpr" 
+				version="tokyo" 
+				writecfg="true" 
+				console="false" 
+				debuginfo="exe" 
+				exeoutput="${exe-output-directory}" 
+				dcuoutput="${dcu-output-directory}" 
+				build="true" 
+				mapfile="detailed">
+			<compileroptions>
+			  <option name="L" value="False"/>
+			  <option name="D" value="True"/>
+			  <option name="Y" value="False"/>
+			  <option name="O" value="True"/>
+			  <option name="W" value="True"/>
+			  <option name="C" value="True"/>
+			</compileroptions>
+			<unitpath includedelphilib="true">
+				<path refid="lib" />
+			</unitpath>
+			<namespaces>
+				<namespace name="Vcl"/>
+				<namespace name="System"/>
+				<namespace name="Winapi"/>
+				<namespace name="System.Win"/>
+				<namespace name="Data"/>
+				<namespace name="Datasnap"/>
+				<namespace name="Vcl.Imaging"/>
+				<namespace name="Xml"/>
+				<namespace name="Soap"/>
+				<namespace name="Vcl.Samples"/>
+				<namespace name="VclTee"/>
+				<namespace name="IBX"/>
+			</namespaces>
+		</dcc>
+		
+	</target>
+
+	<target name="test">
+		<exec program="${exe-output-directory}\teststock.exe"/>
+	</target>	
+
+</project>
