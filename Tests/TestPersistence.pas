@@ -1,4 +1,4 @@
-unit TestContextLibrary;
+unit TestPersistence;
 
 interface
 uses
