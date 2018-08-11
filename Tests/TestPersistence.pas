@@ -484,6 +484,11 @@ begin
   LList := TDataObjectList<TSomeTestDataObject>.Create;
   try
     LContext.Load(LList);
+
+    Assert.AreEqual(1, LList.Count);
+    Assert.AreEqual('Some data', LList[0].StringProperty);
+    Assert.AreEqual(42, LList[0].IntegerProperty);
+
   finally
     LList.Free;
   end;

@@ -104,6 +104,7 @@ begin
         tkWideChar: LProperty.SetValue(LInstance, LQuery.FieldByName(LProperty.Name).AsString);
       end;
     end;
+    AList.Add(LInstance);
   end;
 end;
 
