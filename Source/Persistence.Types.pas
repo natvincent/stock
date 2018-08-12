@@ -20,6 +20,20 @@ type
   end;
   TableNameAttribute = TTableNameAttribute;
 
+  TJoinOnAttribute = class (TCustomAttribute)
+  private
+    FJoinTo: string;
+    FJoinFrom: string;
+  public
+    constructor Create(
+      const AFromProperty: string;
+      const AToProperty: string
+    );
+    property JoinFrom: string read FJoinFrom;
+    property JoinTo: string read FJoinTo;
+  end;
+  JoinOnAttribute = TJoinOnAttribute;
+
   TDataObject = class
   private
     FDataState: TDataState;
@@ -159,6 +173,18 @@ constructor TTableNameAttribute.Create(const ATableName: string);
 begin
   inherited Create;
   FTableName := ATableName;
+end;
+
+{ TJoinOnAttribute }
+
+constructor TJoinOnAttribute.Create(
+  const AFromProperty: string;
+  const AToProperty: string
+);
+begin
+  inherited Create;
+  FJoinFrom := AFromProperty;
+  FJoinTo := AToProperty;
 end;
 
 end.

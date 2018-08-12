@@ -49,8 +49,8 @@ function TContext.AssembleSelect(
     begin
       if LAttribute is TTableNameAttribute then
         Exit(TTableNameAttribute(LAttribute).TableName);
-      raise EContextException.CreateFmt('The class %s must be decorated with a TableName attribute', [AListClass.ClassName]);
     end;
+    raise EContextException.CreateFmt('The class %s must be decorated with a TableName attribute', [AListClass.ClassName]);
   end;
 
 var

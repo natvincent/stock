@@ -64,6 +64,15 @@ type
 
     [Test] procedure CreateContext;
     [Test] procedure LoadObjects;
+    //[Test] procedure LoadSubObjects;
+  end;
+
+  [TestFixture]
+  TestSelectBuilder = class
+  public
+    [Test] procedure BuildSQL;
+    [Test] procedure RaisesExceptionWhenFieldsMissing;
+    [Test] procedure RaisesExceotionWhenTableMissing;
   end;
 
   [TestFixture]
@@ -498,6 +507,135 @@ begin
   Assert.AreEqual('', LField.CheckExpectations);
 end;
 
+(*type
+
+  {$m+}
+  [TableName('MoreTestData')]
+  TSubObject = class (TDataObject)
+  private
+    FParentID: integer;
+    procedure SetParentID(const Value: integer);
+  published
+    property ParentID: integer read FParentID write SetParentID;
+  end;
+
+  [TableName('SomeTestData')]
+  TTestDataObjectWithSubObject = class (TDataObject)
+  private
+    FIntegerProperty: integer;
+    FSubObject: TSubObject;
+    procedure SetIntegerProperty(const Value: integer);
+
+  public
+    constructor Create; override;
+    constructor CreateNew; override;
+    destructor Destroy; override;
+
+  published
+    property IntegerProperty: integer read FIntegerProperty write SetIntegerProperty;
+
+    [JoinOn('IntegerProperty', 'ParentID')]
+    property SubObject: TSubObject read FSubObject;
+
+  end;
+  {$m-}
+
+procedure TTestContext.LoadSubObjects;
+var
+  LField: TMock<IField>;
+  LContext: IContext;
+  LList: TDataObjectList<TSomeTestDataObject>;
+  LItem: TSomeTestDataObject;
+  LLoopCount: integer;
+begin
+  LLoopCount := 1;
+  FConnection.Setup.Expect.Once.When.CreateQuery;
+
+  LField := TMock<IField>.Create;
+  LField.Setup.Expect.Once.When.GetAsString;
+  LField.Setup.WillReturn('Some data').When.GetAsString;
+
+  LField.Setup.Expect.Once.When.GetAsInteger;
+  LField.Setup.WillReturn(42).When.GetAsInteger;
+
+  FQuery.Setup.Expect.Once.When.SQL :=
+              'select'
+   + #13#10 + '  StringProperty,'
+   + #13#10 + '  IntegerProperty'
+   + #13#10 + 'from'
+   + #13#10 + '  SomeTestData';
+
+  FQuery.Setup.Expect.Once.When.Open;
+  FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
+  FQuery.Setup.WillExecute(
+    'GetEOF',
+    function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+    begin
+      result := LLoopCount = 0;
+      dec(LLoopCount);
+    end
+  );
+  FQuery.Setup.Expect.Once.When.FieldByName('StringProperty');
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('StringProperty');
+
+  FQuery.Setup.Expect.Once.When.FieldByName('IntegerProperty');
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('IntegerProperty');
+
+  LContext := TContext.Create(FConnectionFactory);
+
+  LList := TDataObjectList<TSomeTestDataObject>.Create;
+  try
+    LContext.Load(LList);
+
+    Assert.AreEqual(1, LList.Count);
+    Assert.AreEqual('Some data', LList[0].StringProperty);
+    Assert.AreEqual(42, LList[0].IntegerProperty);
+
+  finally
+    LList.Free;
+  end;
+
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FQuery.CheckExpectations);
+  Assert.AreEqual('', LField.CheckExpectations);
+
+{ TSubObject }
+
+procedure TSubObject.SetParentID(const Value: integer);
+begin
+  FParentID := Value;
+  Changed;
+end;
+
+{ TTestDataObjectWithSubObject }
+
+constructor TTestDataObjectWithSubObject.Create;
+begin
+  inherited Create;
+  FSubObject := TSubObject.Create;
+end;
+
+constructor TTestDataObjectWithSubObject.CreateNew;
+begin
+  inherited CreateNew;
+  FSubObject.DataState := dsNew;
+end;
+
+destructor TTestDataObjectWithSubObject.Destroy;
+begin
+  FSubObject.Free;
+  inherited Destroy;
+end;
+
+procedure TTestDataObjectWithSubObject.SetIntegerProperty(const Value: integer);
+begin
+  FIntegerProperty := Value;
+  FSubObject.ParentID := Value;
+  Changed;
+end;*)
+
 procedure TTestContext.Setup;
 begin
   FQuery := TMock<IQuery>.Create;
@@ -512,6 +650,72 @@ begin
   FConnectionFactory.Setup
     .WillReturn(FConnection.InstanceAsValue).When.CreateConnection;
 
+end;
+
+{ TestSelectBuilder }
+
+procedure TestSelectBuilder.BuildSQL;
+var
+  LBuilder: ISelectBuilder;
+  LGeneratedSQL: string;
+const
+  CSelect =
+               'select'
+    + #13#10 + '  IntegerField,'
+    + #13#10 + '  StringField'
+    + #13#10 + 'from'
+    + #13#10 + '  SomeTestData'
+    + #13#10 + 'where 1 = 1'
+    + #13#10 + '  and IntegerField > 42';
+begin
+  LBuilder := TSQLiteSelectBuilder.Create;
+
+  LBuilder.AddField('IntegerField');
+  LBuilder.AddField('StringField');
+  LBuilder.AddFrom('SomeTestData');
+  LBuilder.AddWhereAnd('IntegerField > 42');
+
+  LGeneratedSQL := LBuilder.Generate;
+
+  Assert.AreEqual(
+    CSelect,
+    LGeneratedSQL
+  );
+
+end;
+
+procedure TestSelectBuilder.RaisesExceotionWhenTableMissing;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: ISelectBuilder;
+    begin
+      LBUilder := TSQLiteSelectBuilder.Create;
+
+      LBUilder.AddField('IntegerField');
+
+      LBuilder.Generate;
+    end,
+    EMissingFromClauseException
+  );
+end;
+
+procedure TestSelectBuilder.RaisesExceptionWhenFieldsMissing;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: ISelectBuilder;
+    begin
+      LBUilder := TSQLiteSelectBuilder.Create;
+
+      LBUilder.AddFrom('SomeTestData');
+
+      LBuilder.Generate;
+    end,
+    EMissingFieldsException
+  );
 end;
 
 initialization

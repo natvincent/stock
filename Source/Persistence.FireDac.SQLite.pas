@@ -72,6 +72,25 @@ type
     constructor Create(const ADatabaseFilename: string);
   end;
 
+  TSQLiteSelectBuilder = class (TInterfacedObject, ISelectBuilder)
+  private
+    FFromTable: string;
+    FFields: TStringList;
+    FWhere: TStringList;
+
+    function GenerateFields: string;
+    function GenerateWhere: string;
+  public
+    constructor Create;
+    destructor Destroy; override;
+
+    procedure AddField(const AFieldClause: string);
+    procedure AddFrom(const ATableName: string);
+    procedure AddWhereAnd(const APredicate: string);
+    function Generate: string;
+
+  end;
+
 implementation
 
 uses
@@ -211,6 +230,92 @@ function TFireDACConnectionFactory.CreateConnection: IConnection;
 begin
   result := TFireDACConnection.Create;
   result.Database := FDatabaseFilename;
+end;
+
+{ TSQLiteSelectBuilder }
+
+procedure TSQLiteSelectBuilder.AddField(const AFieldClause: string);
+begin
+  FFields.Add(AFieldClause);
+end;
+
+procedure TSQLiteSelectBuilder.AddFrom(const ATableName: string);
+begin
+  FFromTable := ATableName;
+end;
+
+procedure TSQLiteSelectBuilder.AddWhereAnd(const APredicate: string);
+begin
+  FWhere.Add(APredicate);
+end;
+
+constructor TSQLiteSelectBuilder.Create;
+begin
+  inherited Create;
+  FFields := TStringList.Create;
+  FWhere := TStringList.Create;
+end;
+
+destructor TSQLiteSelectBuilder.Destroy;
+begin
+  FWhere.Free;
+  FFields.Free;
+  inherited;
+end;
+
+function TSQLiteSelectBuilder.Generate: string;
+const
+  CSelect = 'select';
+  CFrom = 
+      #13#10 + 'from'
+    + #13#10 + '  ';
+begin
+  if FFromTable = '' then
+    raise EMissingFromClauseException.Create('You must provide a from table to be able to generate a select statement');
+  result := CSelect
+    + GenerateFields
+    + CFrom + FFromTable
+    + GenerateWhere;
+end;
+
+function TSQLiteSelectBuilder.GenerateFields: string;
+var
+  LField: string;
+  LSeperator: string;
+const
+  CStartFields = 
+    #13#10 + '  ';
+  CFieldSeparator =
+    ','
+    + #13#10 + '  ';
+begin
+  if FFields.Count = 0 then
+    raise EMissingFieldsException.Create('A list of fields must be provided to be able to generate a select statement.');
+  LSeperator := CStartFields;
+  for LField in FFields do
+  begin
+    result := result + LSeperator + LField;
+    LSeperator := CFieldSeparator;
+  end;
+end;
+
+function TSQLiteSelectBuilder.GenerateWhere: string;
+var
+  LPredicate: string;
+  LSeperator: string;
+const
+  CSeparator =
+    #13#10 + '  and ';
+  CStartWhere = 
+    #13#10 + 'where 1 = 1'
+    + CSeparator;
+begin
+  LSeperator := CStartWhere;
+  for LPredicate in FWhere do
+  begin
+    result := result + LSeperator + LPredicate;
+    LSeperator := CSeparator;
+  end;
 end;
 
 end.

@@ -4,9 +4,12 @@ interface
 
 uses
   System.Classes,
-  Persistence.Types;
+  Persistence.Types,
+  System.SysUtils;
 
 type
+
+  EPersistenceException = class (Exception);
 
   {$m+}
   IField = interface
@@ -75,9 +78,19 @@ type
 
   IContext = interface
     ['{33ADAA65-E3D6-498D-96E8-2CC0C380E6FC}']
-
     procedure Load(const AList: TDataObjectList);
 
+  end;
+
+  ESelectBuilderException = class (EPersistenceException);
+  EMissingFieldsException = class (ESelectBuilderException);
+  EMissingFromClauseException = class (ESelectBuilderException);
+
+  ISelectBuilder = interface
+    procedure AddField(const AFieldClause: string);
+    procedure AddFrom(const ATableName: string);
+    procedure AddWhereAnd(const APredicate: string);
+    function Generate: string;
   end;
 
 implementation
