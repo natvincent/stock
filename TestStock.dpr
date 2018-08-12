@@ -19,7 +19,12 @@ uses
   Persistence.ConnectionFactory in 'Source\Persistence.ConnectionFactory.pas',
   Persistence.Context in 'Source\Persistence.Context.pas',
   Persistence.Consts in 'Source\Persistence.Consts.pas',
-  Persistence.StatementCache in 'Source\Persistence.StatementCache.pas';
+  Persistence.StatementCache in 'Source\Persistence.StatementCache.pas',
+  TestStockListController in 'Tests\TestStockListController.pas',
+  Stock.Domain in 'Source\Stock.Domain.pas',
+  Stock.Interfaces in 'Source\Stock.Interfaces.pas',
+  Stock.StockListController in 'Source\Stock.StockListController.pas',
+  Stock.DomainQueries in 'Source\Stock.DomainQueries.pas';
 
 var
   runner : ITestRunner;

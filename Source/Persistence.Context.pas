@@ -17,7 +17,10 @@ type
     FConnection: IConnection;
     FStatementCache: IStatementCache;
     FRTTIContext: TRTTIContext;
-    procedure Load(const AList: TDataObjectList);
+    procedure Load(
+      const AList: TDataObjectList;
+      const ACriteria: string
+    );
     procedure Save(const AList: TDataObjectList);
   public
     constructor Create(
@@ -46,7 +49,10 @@ begin
   FStatementCache := AStatementCache;
 end;
 
-procedure TContext.Load(const AList: TDataObjectList);
+procedure TContext.Load(
+  const AList: TDataObjectList;
+  const ACriteria: string
+);
 var
   LProperties: TArray<TRttiProperty>;
   LProperty: TRttiProperty;
@@ -54,13 +60,16 @@ var
   LSQL: string;
   LQuery: IQuery;
   LInstance: TDataObject;
-
+  LStatementBuilder: IStatementBuilder;
 begin
   LType := FRTTIContext.GetType(AList.ListClass);
   LProperties := LType.GetDeclaredProperties;
 
   LQuery := FConnection.CreateQuery;
-  LQuery.SQL := FStatementCache.GetStatement(stSelect, AList.ListClass);
+  LStatementBuilder := FStatementCache.GetStatement(stSelect, AList.ListClass);
+  if ACriteria <> '' then
+    LStatementBuilder.AddAdditionalWhereAnd(ACriteria);
+  LQuery.SQL := LStatementBuilder.Generate;
   LQuery.Open;
   while not LQuery.EOF do
   begin
@@ -76,6 +85,7 @@ begin
         tkWideChar: LProperty.SetValue(LInstance, LQuery.FieldByName(LProperty.Name).AsString);
       end;
     end;
+    LInstance.DataState := dsClean;
     AList.Add(LInstance);
   end;
 end;
@@ -108,7 +118,7 @@ var
         if not Assigned(LUpdateQuery) then
         begin
           LUpdateQuery := FConnection.CreateQuery;
-          LUpdateQuery.SQL := FStatementCache.GetStatement(stUpdate, AList.ListClass);
+          LUpdateQuery.SQL := FStatementCache.GetStatement(stUpdate, AList.ListClass).Generate;
         end;
         result := LUpdateQuery;
       end;
@@ -117,7 +127,7 @@ var
         if not Assigned(LInsertQuery) then
         begin
           LInsertQuery := FConnection.CreateQuery;
-          LInsertQuery.SQL := FStatementCache.GetStatement(stInsert, AList.ListClass);
+          LInsertQuery.SQL := FStatementCache.GetStatement(stInsert, AList.ListClass).Generate;
         end;
         result := LInsertQuery;
       end;
@@ -154,6 +164,7 @@ var
             raise EOnlyOneIdentityPropertyAllowed.Create(COnlyOneIdentityPropertyAllowed);
           LIdentityProperty := LProperty;
         end;
+        AObject.DataState := dsClean;
       end;
     end;
 

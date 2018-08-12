@@ -17,7 +17,7 @@ type
 
   TStatementCache = class (TInterfacedObject, IStatementCache)
   private
-    FStatements: TDictionary<TStatementKey, string>;
+    FStatements: TDictionary<TStatementKey, IStatementBuilder>;
     FStatementBuilderFactory: IStatementBuilderFactory;
     FRttiContext: TRttiContext;
 
@@ -28,24 +28,24 @@ type
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass
     ): TStatementKey;
-    function CreateSelect(const AClass: TDataObjectClass): string;
-    function CreateUpdate(const AClass: TDataObjectClass): string;
-    function CreateInsert(const AClass: TDataObjectClass): string;
+    function CreateSelect(const AClass: TDataObjectClass): IStatementBuilder;
+    function CreateUpdate(const AClass: TDataObjectClass): IStatementBuilder;
+    function CreateInsert(const AClass: TDataObjectClass): IStatementBuilder;
     procedure AddStatement(
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass;
-      const AStatement: string
+      const AStatement: IStatementBuilder
     );
     function FindStatement(
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass;
-      out AStatement: string
+      out AStatement: IStatementBuilder
     ): boolean;
 
     function GetStatement(
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass
-    ): string;
+    ): IStatementBuilder;
 
   public
     constructor Create(
@@ -65,7 +65,8 @@ uses
 procedure TStatementCache.AddStatement(
   const AStatementType: TStatementType;
   const AForClass: TDataObjectClass;
-  const AStatement: string);
+  const AStatement: IStatementBuilder
+);
 begin
   FStatements.Add(
     CreateKey(
@@ -80,12 +81,12 @@ constructor TStatementCache.Create(
   const AStatementBuilderFactory: IStatementBuilderFactory);
 begin
   inherited Create;
-  FStatements := TDictionary<TStatementKey, string>.Create;
+  FStatements := TDictionary<TStatementKey, IStatementBuilder>.Create;
   FStatementBuilderFactory := AStatementBuilderFactory;
   FRttiContext := TRttiContext.Create;
 end;
 
-function TStatementCache.CreateInsert(const AClass: TDataObjectClass): string;
+function TStatementCache.CreateInsert(const AClass: TDataObjectClass): IStatementBuilder;
 var
   LInsertBuilder: IUpdateInsertBuilder;
   LTypeInfo: TRttiType;
@@ -100,10 +101,10 @@ begin
   for LProperty in LTypeInfo.GetProperties do
     LInsertBuilder.AddFieldParam(LProperty.Name);
   
-  result := LInsertBuilder.Generate;
+  result := LInsertBuilder;
 end;
 
-function TStatementCache.CreateSelect(const AClass: TDataObjectClass): string;
+function TStatementCache.CreateSelect(const AClass: TDataObjectClass): IStatementBuilder;
 var
   LSelectBuilder: ISelectBuilder;
   LTypeInfo: TRttiType;
@@ -119,10 +120,10 @@ begin
   for LProperty in LTypeInfo.GetProperties do
     LSelectBuilder.AddField(LProperty.Name);
 
-  result := LSelectBuilder.Generate;
+  result := LSelectBuilder;
 end;
 
-function TStatementCache.CreateUpdate(const AClass: TDataObjectClass): string;
+function TStatementCache.CreateUpdate(const AClass: TDataObjectClass): IStatementBuilder;
 var
   LTypeInfo: TRttiType;
   LUpdateBuilder: IUpdateInsertBuilder;
@@ -155,7 +156,7 @@ begin
       LUpdateBuilder.AddFieldParam(LProperty.Name);
   end;
 
-  result := LUpdateBuilder.Generate;
+  result := LUpdateBuilder;
 end;
 
 destructor TStatementCache.Destroy;
@@ -174,7 +175,7 @@ end;
 function TStatementCache.FindStatement(
   const AStatementType: TStatementType;
   const AForClass: TDataObjectClass;
-  out AStatement: string
+  out AStatement: IStatementBuilder
 ): boolean;
 var
   LKey: TStatementKey;
@@ -200,7 +201,7 @@ end;
 function TStatementCache.GetStatement(
   const AStatementType: TStatementType;
   const AForClass: TDataObjectClass
-): string;
+): IStatementBuilder;
 begin
   if not FindStatement(
     AStatementType,

@@ -93,6 +93,11 @@
         <DCCReference Include="Source\Persistence.Context.pas"/>
         <DCCReference Include="Source\Persistence.Consts.pas"/>
         <DCCReference Include="Source\Persistence.StatementCache.pas"/>
+        <DCCReference Include="Tests\TestStockListController.pas"/>
+        <DCCReference Include="Source\Stock.Domain.pas"/>
+        <DCCReference Include="Source\Stock.Interfaces.pas"/>
+        <DCCReference Include="Source\Stock.StockListController.pas"/>
+        <DCCReference Include="Source\Stock.DomainQueries.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

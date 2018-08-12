@@ -55,6 +55,9 @@ type
   [TestFixture]
   TTestContext = class
   private
+    FSelectBuilder: TMock<IStatementBuilder>;
+    FInsertBuilder: TMock<IStatementBuilder>;
+    FUpdateBuilder: TMock<IStatementBuilder>;
     FStatementCache: TMock<IStatementCache>;
     FConnectionFactory: TMock<IConnectionFactory>;
     FConnection: TMock<IConnection>;
@@ -65,6 +68,7 @@ type
 
     [Test] procedure CreateContext;
     [Test] procedure LoadObjects;
+    [Test] procedure LoadObjectsWithCriteria;
     [Test] procedure SaveObjects;
     [Test] procedure SaveNewObjectUpdatesKey;
   end;
@@ -89,6 +93,7 @@ type
   TestSelectBuilder = class
   public
     [Test] procedure BuildSQL;
+    [Test] procedure BuildSQLWithTemporaryWhere;
     [Test] procedure RaisesExceptionWhenFieldsMissing;
     [Test] procedure RaisesExceotionWhenTableMissing;
   end;
@@ -542,6 +547,78 @@ begin
     Assert.AreEqual(1, LList.Count);
     Assert.AreEqual('Some data', LList[0].StringProperty);
     Assert.AreEqual(42, LList[0].IntegerProperty);
+    Assert.AreEqual(dsClean, LList[0].DataState);
+  finally
+    LList.Free;
+  end;
+
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FStatementCache.CheckExpectations);
+  Assert.AreEqual('', FQuery.CheckExpectations);
+  Assert.AreEqual('', LField.CheckExpectations);
+end;
+
+const
+  CAdditionalAnd = 'IntegerProperty < 54';
+  CAdditionalWhere =
+      #13#10 + 'where 1 = 1'
+    + #13#10 + '  and ' + CAdditionalAnd;
+
+procedure TTestContext.LoadObjectsWithCriteria;
+var
+  LField: TMock<IField>;
+  LContext: IContext;
+  LList: TDataObjectList<TSomeTestDataObject>;
+  LItem: TSomeTestDataObject;
+  LLoopCount: integer;
+begin
+  LLoopCount := 1;
+  FConnection.Setup.Expect.Once.When.CreateQuery;
+
+  LField := TMock<IField>.Create;
+  LField.Setup.Expect.Once.When.GetAsString;
+  LField.Setup.WillReturn('Some data').When.GetAsString;
+
+  LField.Setup.Expect.Once.When.GetAsInteger;
+  LField.Setup.WillReturn(42).When.GetAsInteger;
+
+  FSelectBuilder.Setup
+    .Expect.Once.When.AddAdditionalWhereAnd(CAdditionalAnd);
+  FSelectBuilder.Setup
+    .WillReturn(CContextTestSelectStatement + CAdditionalWhere).When.Generate;
+
+  FQuery.Setup.Expect.Once.When.SetSQL(
+    CContextTestSelectStatement + CAdditionalWhere
+  );
+
+  FQuery.Setup.Expect.Once.When.Open;
+  FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
+  FQuery.Setup.WillExecute(
+    'GetEOF',
+    function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+    begin
+      result := LLoopCount = 0;
+      dec(LLoopCount);
+    end
+  );
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('StringProperty');
+
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('IntegerProperty');
+
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stSelect, TSomeTestDataObject);
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  LList := TDataObjectList<TSomeTestDataObject>.Create;
+  try
+    LContext.Load(LList, CAdditionalAnd);
+
+    Assert.AreEqual(1, LList.Count);
+    Assert.AreEqual('Some data', LList[0].StringProperty);
+    Assert.AreEqual(42, LList[0].IntegerProperty);
 
   finally
     LList.Free;
@@ -600,7 +677,7 @@ begin
   LContext := TContext.Create(FConnectionFactory, FStatementCache);
 
   FStatementCache.Setup
-    .WillReturn(CSomeOtherDataObjectInsert).When.GetStatement(stInsert, TSomeOtherDataObject);
+    .WillReturn(FUpdateBuilder.InstanceAsValue).When.GetStatement(stInsert, TSomeOtherDataObject);
   FStatementCache.Setup
     .Expect.Once.When.GetStatement(stInsert, TSomeTestDataObject);
 
@@ -701,6 +778,9 @@ begin
 
     LContext.Save(LList);
 
+    Assert.AreEqual(dsClean, LList[0].DataState);
+    Assert.AreEqual(dsClean, LList[1].DataState);
+
   finally
     LList.Free;
   end;
@@ -728,13 +808,25 @@ begin
   FConnectionFactory.Setup
     .WillReturn(FConnection.InstanceAsValue).When.CreateConnection;
 
+  FSelectBuilder := TMock<IStatementBuilder>.Create;
+  FSelectBuilder.Setup
+    .WillReturnDefault('Generate', CContextTestSelectStatement);
+
+  FInsertBuilder := TMock<IStatementBuilder>.Create;
+  FInsertBuilder.Setup
+    .WillReturnDefault('Generate', CContextTestInsertStatement);
+
+  FUpdateBuilder := TMock<IStatementBuilder>.Create;
+  FUpdateBuilder.Setup
+    .WillReturnDefault('Generate', CContextTestUpdateStatement);
+
   FStatementCache := TMock<IStatementCache>.Create;
   FStatementCache.Setup
-    .WillReturn(CContextTestSelectStatement).When.GetStatement(stSelect, TSomeTestDataObject);
+    .WillReturn(FSelectBuilder.InstanceAsValue).When.GetStatement(stSelect, TSomeTestDataObject);
   FStatementCache.Setup
-    .WillReturn(CContextTestInsertStatement).When.GetStatement(stInsert, TSomeTestDataObject);
+    .WillReturn(FInsertBuilder.InstanceAsValue).When.GetStatement(stInsert, TSomeTestDataObject);
   FStatementCache.Setup
-    .WillReturn(CContextTestUpdateStatement).When.GetStatement(stUpdate, TSomeTestDataObject);
+    .WillReturn(FUpdateBuilder.InstanceAsValue).When.GetStatement(stUpdate, TSomeTestDataObject);
 end;
 
 { TestSelectBuilder }
@@ -761,6 +853,48 @@ begin
 
   Assert.AreEqual(
     CSelect,
+    LBuilder.Generate
+  );
+
+end;
+
+procedure TestSelectBuilder.BuildSQLWithTemporaryWhere;
+var
+  LBuilder: ISelectBuilder;
+const
+  CSelect =
+               'select'
+    + #13#10 + '  IntegerField,'
+    + #13#10 + '  StringField'
+    + #13#10 + 'from'
+    + #13#10 + '  SomeTestData'
+    + #13#10 + 'where 1 = 1'
+    + #13#10 + '  and IntegerField > 42';
+
+  CFirstAdditionalAnd =
+    #13#10 + '  and IntegerField < 54';
+
+  CSecondAdditionalAnd =
+    #13#10 + '  and StringField = ''SomeValue''';
+begin
+  LBuilder := TSQLiteSelectBuilder.Create;
+
+  LBuilder.AddField('IntegerField');
+  LBuilder.AddField('StringField');
+  LBuilder.AddFrom('SomeTestData');
+  LBuilder.AddWhereAnd('IntegerField > 42');
+
+  LBuilder.AddAdditionalWhereAnd('IntegerField < 54');
+
+  Assert.AreEqual(
+    CSelect + CFirstAdditionalAnd,
+    LBuilder.Generate
+  );
+
+  LBuilder.AddAdditionalWhereAnd('StringField = ''SomeValue''');
+
+  Assert.AreEqual(
+    CSelect + CSecondAdditionalAnd,
     LBuilder.Generate
   );
 
@@ -945,22 +1079,25 @@ const
 procedure TTestStatementCache.AddStatement;
 var
   LCache: IStatementCache;
+  LSelectStatement: TMock<ISelectBuilder>;
 begin
   FSelectBuilder.Setup
     .Expect.Never.When.Generate;
   FStatementBuilderFactory.Setup
     .Expect.Never.When.CreateSelectBuilder;
 
+  LSelectStatement := TMock<ISelectBuilder>.Create;
+
   LCache := TStatementCache.Create(FStatementBuilderFactory);
 
   LCache.AddStatement(
     stSelect,
     TSomeTestDataObject,
-    CSpecificSelectStatement
+    LSelectStatement.Instance
   );
 
-  Assert.AreEqual(
-    CSpecificSelectStatement,
+  Assert.AreSame(
+    LSelectStatement.Instance,
     LCache.GetStatement(stSelect, TSomeTestDataObject)
   );
 
@@ -988,13 +1125,13 @@ begin
 
   LCache := TStatementCache.Create(FStatementBuilderFactory);
 
-  Assert.AreEqual(
-    CTestInsertStatement,
+  Assert.AreSame(
+    FInsertBuilder,
     LCache.GetStatement(stInsert, TSomeTestDataObject)
   );
 
-  Assert.AreEqual(
-    CTestInsertStatement,
+  Assert.AreSame(
+    FInsertBuilder,
     LCache.GetStatement(stInsert, TSomeTestDataObject)
   );
 
@@ -1022,13 +1159,13 @@ begin
 
   LCache := TStatementCache.Create(FStatementBuilderFactory);
 
-  Assert.AreEqual(
-    CTestSelectStatement,
+  Assert.AreSame(
+    FSelectBuilder,
     LCache.GetStatement(stSelect, TSomeTestDataObject)
   );
 
-  Assert.AreEqual(
-    CTestSelectStatement,
+  Assert.AreSame(
+    FSelectBuilder,
     LCache.GetStatement(stSelect, TSomeTestDataObject)
   );
 
@@ -1057,13 +1194,13 @@ begin
 
   LCache := TStatementCache.Create(FStatementBuilderFactory);
 
-  Assert.AreEqual(
-    CTestUpdateStatement,
+  Assert.AreSame(
+    FUpdateBuilder,
     LCache.GetStatement(stUpdate, TSomeTestDataObject)
   );
 
-  Assert.AreEqual(
-    CTestUpdateStatement,
+  Assert.AreSame(
+    FUpdateBuilder,
     LCache.GetStatement(stUpdate, TSomeTestDataObject)
   );
 

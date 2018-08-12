@@ -82,26 +82,36 @@ type
 
   IContext = interface
     ['{33ADAA65-E3D6-498D-96E8-2CC0C380E6FC}']
-    procedure Load(const AList: TDataObjectList);
+    procedure Load(
+      const AList: TDataObjectList;
+      const ACriteria: string = ''
+    );
     procedure Save(const AList: TDataObjectList);
+  end;
+
+  IStatementBuilder = interface
+    ['{D64C9EA2-9F23-4B27-8750-0DE0C908510B}']
+    procedure AddAdditionalWhereAnd(const APredicate: string);
+    function Generate: string;
   end;
 
   EQueryBuilderException = class (EPersistenceException);
   EMissingFieldsException = class (EQueryBuilderException);
   EMissingFromClauseException = class (EQueryBuilderException);
 
-  ISelectBuilder = interface
+  ISelectBuilder = interface (IStatementBuilder)
     ['{D95ECE3B-1F3B-4274-A19F-B84D1D5FC4AE}']
     procedure AddField(const AFieldClause: string);
     procedure AddFrom(const ATableName: string);
     procedure AddWhereAnd(const APredicate: string);
+    procedure AddAdditionalWhereAnd(const APredicate: string);
     function Generate: string;
   end;
 
   EMissingIntoUpdateClauseException = class (EQueryBuilderException);
   EWhereFieldsNotSupportedForInserts = class (EQueryBuilderException);
 
-  IUpdateInsertBuilder = interface
+  IUpdateInsertBuilder = interface (IStatementBuilder)
     ['{E65F5DB4-EED7-405A-9E28-D5153DE2ABEF}']
     procedure AddFieldParam(const AFieldAndParamName: string);
     procedure AddUpdateInto(const ATableName: string);
@@ -124,11 +134,11 @@ type
     function GetStatement(
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass
-    ): string;
+    ): IStatementBuilder;
     procedure AddStatement(
       const AStatementType: TStatementType;
       const AForClass: TDataObjectClass;
-      const AStatement: string
+      const AStatement: IStatementBuilder
     );
   end;
 

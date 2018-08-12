@@ -17,6 +17,13 @@ type
     constructor Create(const AField: TField);
   end;
 
+  TStatementBuilder = class (TInterfacedObject, IStatementBuilder)
+  protected
+    function Generate: string; virtual; abstract;
+    procedure AddAdditionalWhereAnd(const APredicate: string); virtual;
+
+  end;
+
 implementation
 
 { TPersistenceField }
@@ -37,5 +44,11 @@ begin
   result := FField.AsString;
 end;
 
+
+{ TStatementBuilder }
+
+procedure TStatementBuilder.AddAdditionalWhereAnd(const APredicate: string);
+begin
+end;
 
 end.

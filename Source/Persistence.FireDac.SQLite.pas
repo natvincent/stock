@@ -12,7 +12,8 @@ uses
   FireDAC.Phys,
   FireDAC.Stan.Def,
   FireDAC.Stan.Async,
-  FireDAC.Stan.Param;
+  FireDAC.Stan.Param, 
+  Persistence.DB;
 
 type
 
@@ -73,11 +74,12 @@ type
     constructor Create(const ADatabaseFilename: string);
   end;
 
-  TSQLiteSelectBuilder = class (TInterfacedObject, ISelectBuilder)
+  TSQLiteSelectBuilder = class (TStatementBuilder, ISelectBuilder)
   private
     FFromTable: string;
     FFields: TStringList;
     FWhere: TStringList;
+    FAdditionalWhere: TStringList;
 
     function GenerateFields: string;
     function GenerateWhere: string;
@@ -85,7 +87,10 @@ type
     procedure AddField(const AFieldClause: string);
     procedure AddFrom(const ATableName: string);
     procedure AddWhereAnd(const APredicate: string);
-    function Generate: string;
+    procedure AddAdditionalWhereAnd(const APredicate: string); override;
+
+  protected
+    function Generate: string; override;
 
   public
     constructor Create;
@@ -93,7 +98,7 @@ type
     
   end;
 
-  TSQLiteInsertBuilder = class (TInterfacedObject, IUpdateInsertBuilder)
+  TSQLiteInsertBuilder = class (TStatementBuilder, IUpdateInsertBuilder)
   private
     FFields: TStringList;
     FInsertInto: string;
@@ -101,15 +106,17 @@ type
     procedure AddFieldParam(const AFieldAndParamName: string);
     procedure AddUpdateInto(const ATableName: string);
     procedure AddWhereField(const AFieldAndParamName: string);
-    function Generate: string;
-  
+
+  protected
+    function Generate: string; override;
+
   public
     constructor Create;
     destructor Destroy; override;
     
   end;
   
-  TSQLiteUpdateBuilder = class (TInterfacedObject, IUpdateInsertBuilder)
+  TSQLiteUpdateBuilder = class (TStatementBuilder, IUpdateInsertBuilder)
   private
     FFields: TStringList;
     FWhereFields: TStringList;
@@ -121,7 +128,9 @@ type
     procedure AddFieldParam(const AFieldAndParamName: string);
     procedure AddUpdateInto(const ATableName: string);
     procedure AddWhereField(const AFieldAndParamName: string);
-    function Generate: string;
+
+  protected
+    function Generate: string; override;
   
   public
     constructor Create; 
@@ -139,7 +148,6 @@ implementation
 
 uses
   Persistence.Types,
-  Persistence.DB, 
   Persistence.Consts;
 
 { TFireDACQuery }
@@ -284,6 +292,11 @@ end;
 
 { TSQLiteSelectBuilder }
 
+procedure TSQLiteSelectBuilder.AddAdditionalWhereAnd(const APredicate: string);
+begin
+  FAdditionalWhere.Add(APredicate);
+end;
+
 procedure TSQLiteSelectBuilder.AddField(const AFieldClause: string);
 begin
   FFields.Add(AFieldClause);
@@ -304,10 +317,12 @@ begin
   inherited Create;
   FFields := TStringList.Create;
   FWhere := TStringList.Create;
+  FAdditionalWhere := TStringList.Create;
 end;
 
 destructor TSQLiteSelectBuilder.Destroy;
 begin
+  FAdditionalWhere.Free;
   FWhere.Free;
   FFields.Free;
   inherited;
@@ -326,6 +341,8 @@ begin
     + GenerateFields
     + CFrom + FFromTable
     + GenerateWhere;
+
+  FAdditionalWhere.Clear;
 end;
 
 function TSQLiteSelectBuilder.GenerateFields: string;
@@ -351,7 +368,6 @@ end;
 
 function TSQLiteSelectBuilder.GenerateWhere: string;
 var
-  LPredicate: string;
   LSeperator: string;
 const
   CSeparator =
@@ -359,13 +375,22 @@ const
   CStartWhere = 
     #13#10 + 'where 1 = 1'
     + CSeparator;
+
+  procedure ProcessList(const AWhereList: TStringList);
+  var
+    LPredicate: string;
+  begin
+    for LPredicate in AWhereList do
+    begin
+      result := result + LSeperator + LPredicate;
+      LSeperator := CSeparator;
+    end;
+  end;
+  
 begin
   LSeperator := CStartWhere;
-  for LPredicate in FWhere do
-  begin
-    result := result + LSeperator + LPredicate;
-    LSeperator := CSeparator;
-  end;
+  ProcessList(FWhere);
+  ProcessList(FAdditionalWhere);
 end;
 
 { TSQLiteInsertBuilder }
