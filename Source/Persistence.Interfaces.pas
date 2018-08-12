@@ -82,14 +82,26 @@ type
 
   end;
 
-  ESelectBuilderException = class (EPersistenceException);
-  EMissingFieldsException = class (ESelectBuilderException);
-  EMissingFromClauseException = class (ESelectBuilderException);
+  EQueryBuilderException = class (EPersistenceException);
+  EMissingFieldsException = class (EQueryBuilderException);
+  EMissingFromClauseException = class (EQueryBuilderException);
 
   ISelectBuilder = interface
+    ['{D95ECE3B-1F3B-4274-A19F-B84D1D5FC4AE}']
     procedure AddField(const AFieldClause: string);
     procedure AddFrom(const ATableName: string);
     procedure AddWhereAnd(const APredicate: string);
+    function Generate: string;
+  end;
+
+  EMissingIntoUpdateClauseException = class (EQueryBuilderException);
+  EWhereFieldsNotSupportedForInserts = class (EQueryBuilderException);
+
+  IUpdateInsertBuilder = interface
+    ['{E65F5DB4-EED7-405A-9E28-D5153DE2ABEF}']
+    procedure AddFieldParam(const AFieldAndParamName: string);
+    procedure AddUpdateInto(const ATableName: string);
+    procedure AddWhereField(const AFieldAndParamName: string);
     function Generate: string;
   end;
 

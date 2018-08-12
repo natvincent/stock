@@ -64,7 +64,6 @@ type
 
     [Test] procedure CreateContext;
     [Test] procedure LoadObjects;
-    //[Test] procedure LoadSubObjects;
   end;
 
   [TestFixture]
@@ -73,6 +72,23 @@ type
     [Test] procedure BuildSQL;
     [Test] procedure RaisesExceptionWhenFieldsMissing;
     [Test] procedure RaisesExceotionWhenTableMissing;
+  end;
+
+  [TestFixture]
+  TTestInsertBuilder = class
+  public
+    [Test] procedure BuildSQL;
+    [Test] procedure RaisesExceptionWhenFieldsMissing;
+    [Test] procedure RiasesExceptionWhenMissingInto;
+    [Test] procedure RaisesExceptionWhenWhereFieldUsed;
+  end;
+
+  [TestFixture]
+  TTestUpdateBuilder = class
+  public
+    [Test] procedure BuildSQL;
+    [Test] procedure RaisesExceptionWhenFieldsMissing;
+    [Test] procedure RaisesExceptionWhenUpdateTableMissing;
   end;
 
   [TestFixture]
@@ -507,135 +523,6 @@ begin
   Assert.AreEqual('', LField.CheckExpectations);
 end;
 
-(*type
-
-  {$m+}
-  [TableName('MoreTestData')]
-  TSubObject = class (TDataObject)
-  private
-    FParentID: integer;
-    procedure SetParentID(const Value: integer);
-  published
-    property ParentID: integer read FParentID write SetParentID;
-  end;
-
-  [TableName('SomeTestData')]
-  TTestDataObjectWithSubObject = class (TDataObject)
-  private
-    FIntegerProperty: integer;
-    FSubObject: TSubObject;
-    procedure SetIntegerProperty(const Value: integer);
-
-  public
-    constructor Create; override;
-    constructor CreateNew; override;
-    destructor Destroy; override;
-
-  published
-    property IntegerProperty: integer read FIntegerProperty write SetIntegerProperty;
-
-    [JoinOn('IntegerProperty', 'ParentID')]
-    property SubObject: TSubObject read FSubObject;
-
-  end;
-  {$m-}
-
-procedure TTestContext.LoadSubObjects;
-var
-  LField: TMock<IField>;
-  LContext: IContext;
-  LList: TDataObjectList<TSomeTestDataObject>;
-  LItem: TSomeTestDataObject;
-  LLoopCount: integer;
-begin
-  LLoopCount := 1;
-  FConnection.Setup.Expect.Once.When.CreateQuery;
-
-  LField := TMock<IField>.Create;
-  LField.Setup.Expect.Once.When.GetAsString;
-  LField.Setup.WillReturn('Some data').When.GetAsString;
-
-  LField.Setup.Expect.Once.When.GetAsInteger;
-  LField.Setup.WillReturn(42).When.GetAsInteger;
-
-  FQuery.Setup.Expect.Once.When.SQL :=
-              'select'
-   + #13#10 + '  StringProperty,'
-   + #13#10 + '  IntegerProperty'
-   + #13#10 + 'from'
-   + #13#10 + '  SomeTestData';
-
-  FQuery.Setup.Expect.Once.When.Open;
-  FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
-  FQuery.Setup.WillExecute(
-    'GetEOF',
-    function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
-    begin
-      result := LLoopCount = 0;
-      dec(LLoopCount);
-    end
-  );
-  FQuery.Setup.Expect.Once.When.FieldByName('StringProperty');
-  FQuery.Setup
-    .WillReturn(LField.InstanceAsValue).When.FieldByName('StringProperty');
-
-  FQuery.Setup.Expect.Once.When.FieldByName('IntegerProperty');
-  FQuery.Setup
-    .WillReturn(LField.InstanceAsValue).When.FieldByName('IntegerProperty');
-
-  LContext := TContext.Create(FConnectionFactory);
-
-  LList := TDataObjectList<TSomeTestDataObject>.Create;
-  try
-    LContext.Load(LList);
-
-    Assert.AreEqual(1, LList.Count);
-    Assert.AreEqual('Some data', LList[0].StringProperty);
-    Assert.AreEqual(42, LList[0].IntegerProperty);
-
-  finally
-    LList.Free;
-  end;
-
-  Assert.AreEqual('', FConnection.CheckExpectations);
-  Assert.AreEqual('', FQuery.CheckExpectations);
-  Assert.AreEqual('', LField.CheckExpectations);
-
-{ TSubObject }
-
-procedure TSubObject.SetParentID(const Value: integer);
-begin
-  FParentID := Value;
-  Changed;
-end;
-
-{ TTestDataObjectWithSubObject }
-
-constructor TTestDataObjectWithSubObject.Create;
-begin
-  inherited Create;
-  FSubObject := TSubObject.Create;
-end;
-
-constructor TTestDataObjectWithSubObject.CreateNew;
-begin
-  inherited CreateNew;
-  FSubObject.DataState := dsNew;
-end;
-
-destructor TTestDataObjectWithSubObject.Destroy;
-begin
-  FSubObject.Free;
-  inherited Destroy;
-end;
-
-procedure TTestDataObjectWithSubObject.SetIntegerProperty(const Value: integer);
-begin
-  FIntegerProperty := Value;
-  FSubObject.ParentID := Value;
-  Changed;
-end;*)
-
 procedure TTestContext.Setup;
 begin
   FQuery := TMock<IQuery>.Create;
@@ -657,7 +544,6 @@ end;
 procedure TestSelectBuilder.BuildSQL;
 var
   LBuilder: ISelectBuilder;
-  LGeneratedSQL: string;
 const
   CSelect =
                'select'
@@ -675,11 +561,9 @@ begin
   LBuilder.AddFrom('SomeTestData');
   LBuilder.AddWhereAnd('IntegerField > 42');
 
-  LGeneratedSQL := LBuilder.Generate;
-
   Assert.AreEqual(
     CSelect,
-    LGeneratedSQL
+    LBuilder.Generate
   );
 
 end;
@@ -715,6 +599,142 @@ begin
       LBuilder.Generate;
     end,
     EMissingFieldsException
+  );
+end;
+
+{ TTestInsertBuilder }
+
+procedure TTestInsertBuilder.BuildSQL;
+var
+  LBuilder: IUpdateInsertBuilder;
+const
+  CInsert =
+               'insert into SomeTestData ('
+    + #13#10 + '  IntegerField,'
+    + #13#10 + '  StringField'
+    + #13#10 + ') values ('
+    + #13#10 + '  :IntegerField,'
+    + #13#10 + '  :StringField'
+    + #13#10 + ')';
+begin
+  LBuilder := TSQLiteInsertBuilder.Create;
+
+  LBuilder.AddUpdateInto('SomeTestData');
+  LBuilder.AddFieldParam('IntegerField');
+  LBuilder.AddFieldParam('StringField');
+
+  Assert.AreEqual(
+    CInsert,
+    LBuilder.Generate
+  );
+end;
+
+procedure TTestInsertBuilder.RaisesExceptionWhenFieldsMissing;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: IUpdateInsertBuilder;
+    begin
+      LBUilder := TSQLiteInsertBuilder.Create;
+
+      LBUilder.AddUpdateInto('SomeTestData');
+
+      LBuilder.Generate;
+    end,
+    EMissingFieldsException
+  );
+end;
+
+procedure TTestInsertBuilder.RaisesExceptionWhenWhereFieldUsed;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: IUpdateInsertBuilder;
+    begin
+      LBUilder := TSQLiteInsertBuilder.Create;
+
+      LBUilder.AddWhereField('KeyField');
+    end,
+    EWhereFieldsNotSupportedForInserts
+  );
+end;
+
+procedure TTestInsertBuilder.RiasesExceptionWhenMissingInto;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: IUpdateInsertBuilder;
+    begin
+      LBUilder := TSQLiteInsertBuilder.Create;
+
+      LBUilder.AddFieldParam('IntegerField');
+
+      LBuilder.Generate;
+    end,
+    EMissingIntoUpdateClauseException
+  );
+end;
+
+{ TTestUpdateBuilder }
+
+procedure TTestUpdateBuilder.BuildSQL;
+var
+  LBuilder: IUpdateInsertBuilder;
+const
+  CUpdate =
+               'update SomeTestData set'
+    + #13#10 + '  IntegerField = :IntegerField,'
+    + #13#10 + '  StringField = :StringField'
+    + #13#10 + 'where'
+    + #13#10 + '  KeyField = :KeyField';
+begin
+  LBuilder := TSQLiteUpdateBuilder.Create;
+
+  LBuilder.AddUpdateInto('SomeTestData');
+  LBuilder.AddFieldParam('IntegerField');
+  LBuilder.AddFieldParam('StringField');
+  LBuilder.AddWhereField('KeyField');
+
+  Assert.AreEqual(
+    CUpdate,
+    LBuilder.Generate
+  );
+end;
+
+procedure TTestUpdateBuilder.RaisesExceptionWhenFieldsMissing;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: IUpdateInsertBuilder;
+    begin
+      LBUilder := TSQLiteUpdateBuilder.Create;
+
+      LBUilder.AddUpdateInto('SomeTestData');
+
+      LBuilder.Generate;
+    end,
+    EMissingFieldsException
+  );
+end;
+
+procedure TTestUpdateBuilder.RaisesExceptionWhenUpdateTableMissing;
+begin
+  Assert.WillRaise(
+    procedure
+    var
+      LBuilder: IUpdateInsertBuilder;
+    begin
+      LBUilder := TSQLiteUpdateBuilder.Create;
+
+      LBUilder.AddFieldParam('IntegerField');
+
+      LBuilder.Generate;
+    end,
+    EMissingIntoUpdateClauseException
   );
 end;
 

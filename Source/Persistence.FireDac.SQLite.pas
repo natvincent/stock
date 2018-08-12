@@ -80,22 +80,59 @@ type
 
     function GenerateFields: string;
     function GenerateWhere: string;
-  public
-    constructor Create;
-    destructor Destroy; override;
 
     procedure AddField(const AFieldClause: string);
     procedure AddFrom(const ATableName: string);
     procedure AddWhereAnd(const APredicate: string);
     function Generate: string;
 
+  public
+    constructor Create;
+    destructor Destroy; override;
+    
   end;
 
+  TSQLiteInsertBuilder = class (TInterfacedObject, IUpdateInsertBuilder)
+  private
+    FFields: TStringList;
+    FInsertInto: string;
+
+    procedure AddFieldParam(const AFieldAndParamName: string);
+    procedure AddUpdateInto(const ATableName: string);
+    procedure AddWhereField(const AFieldAndParamName: string);
+    function Generate: string;
+  
+  public
+    constructor Create;
+    destructor Destroy; override;
+    
+  end;
+  
+  TSQLiteUpdateBuilder = class (TInterfacedObject, IUpdateInsertBuilder)
+  private
+    FFields: TStringList;
+    FWhereFields: TStringList;
+    FUpdateTable: string;
+    
+    function GenerateSet: string;
+    function GenerateWhere: string;
+
+    procedure AddFieldParam(const AFieldAndParamName: string);
+    procedure AddUpdateInto(const ATableName: string);
+    procedure AddWhereField(const AFieldAndParamName: string);
+    function Generate: string;
+  
+  public
+    constructor Create; 
+    destructor Destroy; override;
+  end;
+  
 implementation
 
 uses
   Persistence.Types,
-  Persistence.DB;
+  Persistence.DB, 
+  Persistence.Consts;
 
 { TFireDACQuery }
 
@@ -271,7 +308,7 @@ const
     + #13#10 + '  ';
 begin
   if FFromTable = '' then
-    raise EMissingFromClauseException.Create('You must provide a from table to be able to generate a select statement');
+    raise EMissingFromClauseException.Create(CMissingFromMessage);
   result := CSelect
     + GenerateFields
     + CFrom + FFromTable
@@ -290,7 +327,7 @@ const
     + #13#10 + '  ';
 begin
   if FFields.Count = 0 then
-    raise EMissingFieldsException.Create('A list of fields must be provided to be able to generate a select statement.');
+    raise EMissingFieldsException.Create(CMissingFieldsMessage);
   LSeperator := CStartFields;
   for LField in FFields do
   begin
@@ -316,6 +353,147 @@ begin
     result := result + LSeperator + LPredicate;
     LSeperator := CSeparator;
   end;
+end;
+
+{ TSQLiteInsertBuilder }
+
+procedure TSQLiteInsertBuilder.AddFieldParam(const AFieldAndParamName: string);
+begin
+  FFields.Add(AFieldAndParamName);
+end;
+
+procedure TSQLiteInsertBuilder.AddUpdateInto(const ATableName: string);
+begin
+  FInsertInto := ATableName;
+end;
+
+procedure TSQLiteInsertBuilder.AddWhereField(const AFieldAndParamName: string);
+begin
+  raise EWhereFieldsNotSupportedForInserts.Create(CWhereFieldsNotSupported);
+end;
+
+constructor TSQLiteInsertBuilder.Create;
+begin
+  inherited Create;
+  FFields := TStringList.Create;
+end;
+
+destructor TSQLiteInsertBuilder.Destroy;
+begin
+  FFields.Free;
+  inherited;
+end;
+
+function TSQLiteInsertBuilder.Generate: string;
+var
+  LField: string;
+  LFields: string;
+  LValues: string;
+  LSeparator: string;
+const
+  CLineStart = 
+    #13#10 + '  ';
+  CFieldSeparator = 
+    ','
+    + CLineStart;  
+begin
+  if FInsertInto = '' then
+    raise EMissingIntoUpdateClauseException.Create(CMissingIntoUpdateMessage);
+  if FFields.Count = 0 then
+    raise EMissingFieldsException.Create(CMissingFieldsMessage);
+  LSeparator := CLineStart;
+  for LField in FFields do
+  begin
+    LFields := LFields + LSeparator + LField;
+    LValues := LValues + LSeparator + ':' + LField;
+    LSeparator := CFieldSeparator;
+  end;
+  result := 
+    'insert into ' + FInsertInto + ' ('
+    + LFields
+    + #13#10 + ') values (' 
+    + LValues
+    + #13#10 + ')';
+end;
+
+{ TSQLiteUpdateBuilder }
+
+procedure TSQLiteUpdateBuilder.AddFieldParam(const AFieldAndParamName: string);
+begin
+  FFields.Add(AFieldAndParamName);
+end;
+
+procedure TSQLiteUpdateBuilder.AddUpdateInto(const ATableName: string);
+begin
+  FUpdateTable := ATableName;
+end;
+
+procedure TSQLiteUpdateBuilder.AddWhereField(const AFieldAndParamName: string);
+begin
+  FWhereFields.Add(AFieldAndParamName); 
+end;
+
+constructor TSQLiteUpdateBuilder.Create;
+begin
+  inherited Create;
+  FFields := TStringList.Create;
+  FWhereFields := TStringList.Create;
+end;
+
+destructor TSQLiteUpdateBuilder.Destroy;
+begin
+  FWhereFields.Free;
+  FFields.Free;
+  inherited;
+end;
+
+function TSQLiteUpdateBuilder.GenerateSet: string;
+var
+  LSeparator: string;
+  LField: string;
+const
+  CStart = 
+    #13#10 + '  ';
+  CFieldSeparator = 
+    ',' 
+    + CStart;
+begin
+  if FFields.Count = 0 then
+    raise EMissingFieldsException.Create(CMissingFieldsMessage);
+  LSeparator := CStart;
+  for LField in FFields do
+  begin
+    result := result + LSeparator + LField + ' = :' + LField;
+    LSeparator := CFieldSeparator;
+  end;
+end;
+
+function TSQLiteUpdateBuilder.GenerateWhere: string;
+var
+  LSeparator: string;
+  LWhereField: string;
+const
+  CStart = 
+      #13#10 + 'where'
+    + #13#10 + '  ';
+  CFieldSeparator = 
+    #13#10 + 'and ';
+begin
+  LSeparator := CStart;
+  for LWhereField in FWhereFields do
+  begin
+    result := result + LSeparator + LWhereField + ' = :' + LWhereField;
+    LSeparator := CFieldSeparator;
+  end;
+end;
+
+function TSQLiteUpdateBuilder.Generate: string;
+begin
+  if FUpdateTable = '' then
+    raise EMissingIntoUpdateClauseException.Create(CMissingIntoUpdateMessage);
+  result := 'update ' + FUpdateTable + ' set'
+  + GenerateSet
+  + GenerateWhere;
 end;
 
 end.

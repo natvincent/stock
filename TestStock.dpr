@@ -17,7 +17,8 @@ uses
   Persistence.Types in 'Source\Persistence.Types.pas',
   Persistence.DB in 'Source\Persistence.DB.pas',
   Persistence.ConnectionFactory in 'Source\Persistence.ConnectionFactory.pas',
-  Persistence.Context in 'Source\Persistence.Context.pas';
+  Persistence.Context in 'Source\Persistence.Context.pas',
+  Persistence.Consts in 'Source\Persistence.Consts.pas';
 
 var
   runner : ITestRunner;
