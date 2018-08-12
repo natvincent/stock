@@ -1,2 +1,10 @@
 __history
 *.dcu
+*.local
+/*.identcache
+*.stat
+*.dsk
+*.~dsk
+*.cfg
+*.skincfg
+*.tvsconfig

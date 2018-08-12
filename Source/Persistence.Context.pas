@@ -15,63 +15,35 @@ type
   TContext = class (TInterfacedObject, IContext)
   private
     FConnection: IConnection;
+    FStatementCache: IStatementCache;
     FRTTIContext: TRTTIContext;
     procedure Load(const AList: TDataObjectList);
-    function AssembleSelect(
-      const AProperties: TArray<TRttiProperty>;
-      const AListClass: TDataObjectClass
-    ): string;
+    procedure Save(const AList: TDataObjectList);
   public
-    constructor Create(const AConnectionFactory: IConnectionFactory);
+    constructor Create(
+      const AConnectionFactory: IConnectionFactory;
+      const AStatementCache: IStatementCache
+    );
+
   end;
 
 implementation
 
+uses
+  Persistence.Consts,
+  System.TypInfo;
+
 { TContext }
 
-constructor TContext.Create(const AConnectionFactory: IConnectionFactory);
+constructor TContext.Create(
+  const AConnectionFactory: IConnectionFactory;
+  const AStatementCache: IStatementCache
+);
 begin
   inherited Create;
   FRTTIContext := TRttiContext.Create;
   FConnection := AConnectionFactory.CreateConnection;
-end;
-
-function TContext.AssembleSelect(
-  const AProperties: TArray<TRttiProperty>;
-  const AListClass: TDataObjectClass
-): string;
-
-  function FindTableName: string;
-  var
-    LAttribute: TCustomAttribute;
-  begin
-    for LAttribute in FRTTIContext.GetType(AListClass).GetAttributes do
-    begin
-      if LAttribute is TTableNameAttribute then
-        Exit(TTableNameAttribute(LAttribute).TableName);
-    end;
-    raise EContextException.CreateFmt('The class %s must be decorated with a TableName attribute', [AListClass.ClassName]);
-  end;
-
-var
-  LProperty: TRttiProperty;
-  LLineSeperator: string;
-const
-  CLineSeperator = ',' + #13#10;
-begin
-  if Length(AProperties) = 0 then
-    raise EContextException.CreateFmt('The type %s must have published properties to be loaded', [AListClass.ClassName]);
-
-  Assert(Length(AProperties) > 0, '');
-  result := 'select'+ #13#10;
-  for LProperty in AProperties do
-  begin
-    result := result + LLineSeperator + '  ' + LProperty.Name;
-    LLineSeperator := CLineSeperator;
-  end;
-  result := result
-    + #13#10 + 'from'
-    + #13#10 + '  ' + FindTableName;
+  FStatementCache := AStatementCache;
 end;
 
 procedure TContext.Load(const AList: TDataObjectList);
@@ -88,7 +60,7 @@ begin
   LProperties := LType.GetDeclaredProperties;
 
   LQuery := FConnection.CreateQuery;
-  LQuery.SQL := AssembleSelect(LProperties, AList.ListClass);
+  LQuery.SQL := FStatementCache.GetStatement(stSelect, AList.ListClass);
   LQuery.Open;
   while not LQuery.EOF do
   begin
@@ -106,6 +78,99 @@ begin
     end;
     AList.Add(LInstance);
   end;
+end;
+
+function IsIdentityProperty(const AProperty: TRttiProperty): boolean;
+var
+  LAttribute: TCustomAttribute;
+begin
+  for LAttribute in AProperty.GetAttributes do
+  begin
+    if LAttribute is TIdentityFieldAttribute then
+      Exit(True);
+  end;
+  result := False;
+end;
+
+procedure TContext.Save(const AList: TDataObjectList);
+var
+  LInsertQuery: IQuery;
+  LUpdateQuery: IQuery;
+  LObject: TDataObject;
+  LTypeInfo: TRttiType;
+
+  function PopulateQuery(const AStatementType: TStatementType): IQuery;
+  begin
+    result := nil;
+    case AStatementType of
+      stUpdate:
+      begin
+        if not Assigned(LUpdateQuery) then
+        begin
+          LUpdateQuery := FConnection.CreateQuery;
+          LUpdateQuery.SQL := FStatementCache.GetStatement(stUpdate, AList.ListClass);
+        end;
+        result := LUpdateQuery;
+      end;
+      stInsert:
+      begin
+        if not Assigned(LInsertQuery) then
+        begin
+          LInsertQuery := FConnection.CreateQuery;
+          LInsertQuery.SQL := FStatementCache.GetStatement(stInsert, AList.ListClass);
+        end;
+        result := LInsertQuery;
+      end;
+    end;
+  end;
+
+  procedure SaveObject(const AObject: TDataObject);
+  var
+    LQuery: IQuery;
+    LProperty: TRttiProperty;
+    LIdentityProperty: TRttiProperty;
+    LParam: IParam;
+  begin
+    if not AObject.IsDirty then Exit; //======>
+
+    LQuery := PopulateQuery(CStateToStatementTypeMap[AObject.DataState]);
+
+    for LProperty in LTypeInfo.GetProperties do
+    begin
+      if LProperty.Visibility = mvPublished then
+      begin
+        LParam := LQuery.ParamByName(LProperty.Name);
+        case LProperty.PropertyType.TypeKind of
+          tkInteger: LParam.AsInteger := LProperty.GetValue(AObject).AsInteger;
+          tkChar,
+          tkString,
+          tkUString,
+          tkWString,
+          tkWideChar: LParam.AsString := LProperty.GetValue(AObject).AsString;
+        end;
+        if IsIdentityProperty(LProperty) then
+        begin
+          if Assigned(LIdentityProperty) then
+            raise EOnlyOneIdentityPropertyAllowed.Create(COnlyOneIdentityPropertyAllowed);
+          LIdentityProperty := LProperty;
+        end;
+      end;
+    end;
+
+    LQuery.Execute;
+
+    if Assigned(LIdentityProperty) then
+    begin
+      LIdentityProperty.SetValue(AObject, FConnection.GetLastIdentityValue);
+    end;
+  end;
+
+begin
+  LInsertQuery := nil;
+  LUpdateQuery := nil;
+  LTypeInfo := FRTTIContext.GetType(AList.ListClass);
+  for LObject in AList do
+    SaveObject(LObject);
 end;
 
 end.

@@ -55,6 +55,7 @@ type
   [TestFixture]
   TTestContext = class
   private
+    FStatementCache: TMock<IStatementCache>;
     FConnectionFactory: TMock<IConnectionFactory>;
     FConnection: TMock<IConnection>;
     FQuery: TMock<IQuery>;
@@ -64,6 +65,24 @@ type
 
     [Test] procedure CreateContext;
     [Test] procedure LoadObjects;
+    [Test] procedure SaveObjects;
+    [Test] procedure SaveNewObjectUpdatesKey;
+  end;
+
+  [TestFixture]
+  TTestStatementCache = class
+  private
+    FStatementBuilderFactory: TMock<IStatementBuilderFactory>;
+    FSelectBuilder: TMock<ISelectBuilder>;
+    FUpdateBuilder: TMock<IUpdateInsertBuilder>;
+    FInsertBuilder: TMock<IUpdateInsertBuilder>;
+  public
+    [Setup] procedure Setup;
+
+    [Test] procedure CreateSelectForClass;
+    [Test] procedure CreateUpdateForClass;
+    [Test] procedure CreateInsertForClass;
+    [Test] procedure AddStatement;
   end;
 
   [TestFixture]
@@ -114,7 +133,8 @@ uses
   FireDAC.Stan.Param,
   Persistence.Context,
   System.Classes,
-  System.Rtti;
+  System.Rtti,
+  Persistence.StatementCache;
 
 const
   CDatabaseFilename = 'TestDatabase.sdb';
@@ -341,6 +361,8 @@ type
 
   published
     property StringProperty: string read FStringProperty write SetStringProperty;
+
+    [KeyField]
     property IntegerProperty: integer read FIntegerProperty write SetIntegerProperty;
   end;
   {$m-}
@@ -456,10 +478,19 @@ begin
   LConnectionFactory.Setup
     .WillReturn(LConnection.InstanceAsValue).When.CreateConnection;
 
-  LContext := TContext.Create(LConnectionFactory);
+  LContext := TContext.Create(LConnectionFactory, FStatementCache);
 
   Assert.AreEqual('', LConnectionFactory.CheckExpectations);
 end;
+
+const
+  CContextTestSelectStatement =
+              'select'
+   + #13#10 + '  StringProperty,'
+   + #13#10 + '  IntegerProperty'
+   + #13#10 + 'from'
+   + #13#10 + '  SomeTestData';
+
 
 procedure TTestContext.LoadObjects;
 var
@@ -479,12 +510,7 @@ begin
   LField.Setup.Expect.Once.When.GetAsInteger;
   LField.Setup.WillReturn(42).When.GetAsInteger;
 
-  FQuery.Setup.Expect.Once.When.SQL :=
-              'select'
-   + #13#10 + '  StringProperty,'
-   + #13#10 + '  IntegerProperty'
-   + #13#10 + 'from'
-   + #13#10 + '  SomeTestData';
+  FQuery.Setup.Expect.Once.When.SQL := CContextTestSelectStatement;
 
   FQuery.Setup.Expect.Once.When.Open;
   FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
@@ -504,7 +530,10 @@ begin
   FQuery.Setup
     .WillReturn(LField.InstanceAsValue).When.FieldByName('IntegerProperty');
 
-  LContext := TContext.Create(FConnectionFactory);
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stSelect, TSomeTestDataObject);
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
 
   LList := TDataObjectList<TSomeTestDataObject>.Create;
   try
@@ -519,8 +548,170 @@ begin
   end;
 
   Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FStatementCache.CheckExpectations);
   Assert.AreEqual('', FQuery.CheckExpectations);
   Assert.AreEqual('', LField.CheckExpectations);
+end;
+
+type
+
+  {$m+}
+  TSomeOtherDataObject = class (TDataObject)
+  private
+    FID: integer;
+    FStringProperty: string;
+  published
+    property StringProperty: string read FStringProperty write FStringProperty;
+
+    [IdentityField]
+    property ID: integer read FID write FID;
+  end;
+  {$m-}
+
+const
+  CSomeOtherDataObjectInsert =
+   'insert into SomeOtherData';
+
+procedure TTestContext.SaveNewObjectUpdatesKey;
+var
+  LStringParam: TMock<IParam>;
+  LIntegerParam: TMock<IParam>;
+  LContext: IContext;
+  LList: TDataObjectList<TSomeOtherDataObject>;
+  LItem: TSomeOtherDataObject;
+const
+  CTestIdentity = 54;
+begin
+  LStringParam := TMock<IParam>.Create;
+  LIntegerParam := TMock<IParam>.Create;
+
+  FConnection.Setup
+    .Expect.Exactly(1).When.CreateQuery;
+  FConnection.Setup
+    .Expect.Exactly(1).When.GetLastIdentityValue;
+  FConnection.Setup
+    .WillReturn(CTestIdentity).When.GetLastIdentityValue;
+
+  FQuery.Setup
+    .WillReturn(LStringParam.InstanceAsValue).When.ParamByName('StringProperty');
+  FQuery.Setup
+    .WillReturn(LIntegerParam.InstanceAsValue).When.ParamByName('ID');
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  FStatementCache.Setup
+    .WillReturn(CSomeOtherDataObjectInsert).When.GetStatement(stInsert, TSomeOtherDataObject);
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stInsert, TSomeTestDataObject);
+
+  LList := TDataObjectList<TSomeOtherDataObject>.Create;
+  try
+    LItem := TSomeOtherDataObject.CreateNew;
+    LItem.StringProperty := 'String Value 1';
+    LList.Add(LItem);
+
+    LContext.Save(LList);
+
+    Assert.AreEqual(CTestIdentity, LItem.ID);
+
+  finally
+    LList.Free;
+  end;
+
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', LStringParam.CheckExpectations);
+  Assert.AreEqual('', LIntegerParam.CheckExpectations);
+
+end;
+
+const
+  CContextTestInsertStatement =
+               'insert into SomeTestData ('
+    + #13#10 + '  StringProperty,'
+    + #13#10 + '  IntegerProperty'
+    + #13#10 + ') values ('
+    + #13#10 + '  :StringProperty,'
+    + #13#10 + '  :IntegerProperty'
+    + #13#10 + ')';
+
+  CContextTestUpdateStatement =
+               'update SomeTestData set'
+    + #13#10 + '  StringProperty = :StringProperty'
+    + #13#10 + 'where'
+    + #13#10 + '  IntegerProperty = :IntegerProperty';
+
+procedure TTestContext.SaveObjects;
+var
+  LStringParam: TMock<IParam>;
+  LIntegerParam: TMock<IParam>;
+  LContext: IContext;
+  LList: TDataObjectList<TSomeTestDataObject>;
+  LItem: TSomeTestDataObject;
+begin
+  LStringParam := TMock<IParam>.Create;
+  LStringParam.Setup
+    .Expect.Once.When.SetAsString('String Value 1');
+  LStringParam.Setup
+    .Expect.Once.When.SetAsString('String Value 2');
+
+  LIntegerParam := TMock<IParam>.Create;
+  LIntegerParam.Setup
+    .Expect.Once.When.SetAsInteger(42);
+  LIntegerParam.Setup
+    .Expect.Once.When.SetAsInteger(12);
+
+  FConnection.Setup
+    .Expect.Exactly(2).When.CreateQuery;
+
+  FQuery.Setup
+    .WillReturn(LStringParam.InstanceAsValue).When.ParamByName('StringProperty');
+  FQuery.Setup
+    .Expect.Exactly(2).When.ParamByName('StringProperty');
+
+  FQuery.Setup
+    .WillReturn(LIntegerParam.InstanceAsValue).When.ParamByName('IntegerProperty');
+  FQuery.Setup
+    .Expect.Exactly(2).When.ParamByName('IntegerProperty');
+
+  FQuery.Setup
+    .Expect.Once.When.SetSQL(CContextTestInsertStatement);
+  FQuery.Setup
+    .Expect.Once.When.SetSQL(CContextTestUpdateStatement);
+  FQuery.Setup
+    .Expect.Exactly(2).When.Execute;
+
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stUpdate, TSomeTestDataObject);
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stInsert, TSomeTestDataObject);
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  LList := TDataObjectList<TSomeTestDataObject>.Create;
+  try
+    LItem := TSomeTestDataObject.CreateNew;
+    LItem.StringProperty := 'String Value 1';
+    LItem.IntegerProperty := 42;
+    LList.Add(LItem);
+
+    LItem := TSomeTestDataObject.Create;
+    LItem.StringProperty := 'String Value 2';
+    LItem.IntegerProperty := 12;
+    LList.Add(LItem);
+
+    LContext.Save(LList);
+
+  finally
+    LList.Free;
+  end;
+
+  Assert.AreEqual('', FConnectionFactory.CheckExpectations);
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FStatementCache.CheckExpectations);
+  Assert.AreEqual('', LStringParam.CheckExpectations);
+  Assert.AreEqual('', LIntegerParam.CheckExpectations);
+  Assert.AreEqual('', FQuery.CheckExpectations);
+
 end;
 
 procedure TTestContext.Setup;
@@ -537,6 +728,13 @@ begin
   FConnectionFactory.Setup
     .WillReturn(FConnection.InstanceAsValue).When.CreateConnection;
 
+  FStatementCache := TMock<IStatementCache>.Create;
+  FStatementCache.Setup
+    .WillReturn(CContextTestSelectStatement).When.GetStatement(stSelect, TSomeTestDataObject);
+  FStatementCache.Setup
+    .WillReturn(CContextTestInsertStatement).When.GetStatement(stInsert, TSomeTestDataObject);
+  FStatementCache.Setup
+    .WillReturn(CContextTestUpdateStatement).When.GetStatement(stUpdate, TSomeTestDataObject);
 end;
 
 { TestSelectBuilder }
@@ -736,6 +934,164 @@ begin
     end,
     EMissingIntoUpdateClauseException
   );
+end;
+
+{ TTestStatementCache }
+
+const
+  CSpecificSelectStatement =
+    'select * /* special select statement */ from SomeTestData';
+
+procedure TTestStatementCache.AddStatement;
+var
+  LCache: IStatementCache;
+begin
+  FSelectBuilder.Setup
+    .Expect.Never.When.Generate;
+  FStatementBuilderFactory.Setup
+    .Expect.Never.When.CreateSelectBuilder;
+
+  LCache := TStatementCache.Create(FStatementBuilderFactory);
+
+  LCache.AddStatement(
+    stSelect,
+    TSomeTestDataObject,
+    CSpecificSelectStatement
+  );
+
+  Assert.AreEqual(
+    CSpecificSelectStatement,
+    LCache.GetStatement(stSelect, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual('', FSelectBuilder.CheckExpectations);
+  Assert.AreEqual('', FStatementBuilderFactory.CheckExpectations);
+end;
+
+const
+  CTestInsertStatement =
+    'insert into SomeTestData ()';
+
+procedure TTestStatementCache.CreateInsertForClass;
+var
+  LCache: IStatementCache;
+begin
+  FStatementBuilderFactory.Setup
+    .Expect.Once.When.CreateInsertBuilder;
+
+  FInsertBuilder.Setup
+    .Expect.Once.When.AddFieldParam('IntegerProperty');
+  FInsertBuilder.Setup
+    .Expect.Once.When.AddFieldParam('StringProperty');
+  FInsertBuilder.Setup
+    .Expect.Once.When.AddUpdateInto('SomeTestData');
+
+  LCache := TStatementCache.Create(FStatementBuilderFactory);
+
+  Assert.AreEqual(
+    CTestInsertStatement,
+    LCache.GetStatement(stInsert, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual(
+    CTestInsertStatement,
+    LCache.GetStatement(stInsert, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual('', FInsertBuilder.CheckExpectations);
+  Assert.AreEqual('', FStatementBuilderFactory.CheckExpectations);
+end;
+
+const
+  CTestSelectStatement =
+    'select * from SomeTestData';
+
+procedure TTestStatementCache.CreateSelectForClass;
+var
+  LCache: IStatementCache;
+begin
+  FStatementBuilderFactory.Setup
+    .Expect.Once.When.CreateSelectBuilder;
+
+  FSelectBuilder.Setup
+    .Expect.Once.When.AddField('IntegerProperty');
+  FSelectBuilder.Setup
+    .Expect.Once.When.AddField('StringProperty');
+  FSelectBuilder.Setup
+    .Expect.Once.When.AddFrom('SomeTestData');
+
+  LCache := TStatementCache.Create(FStatementBuilderFactory);
+
+  Assert.AreEqual(
+    CTestSelectStatement,
+    LCache.GetStatement(stSelect, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual(
+    CTestSelectStatement,
+    LCache.GetStatement(stSelect, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual('', FSelectBuilder.CheckExpectations);
+  Assert.AreEqual('', FStatementBuilderFactory.CheckExpectations);
+
+end;
+
+const
+  CTestUpdateStatement =
+    'update SomeTestData set';
+
+procedure TTestStatementCache.CreateUpdateForClass;
+var
+  LCache: IStatementCache;
+begin
+  FStatementBuilderFactory.Setup
+    .Expect.Once.When.CreateUpdateBuilder;
+
+  FUpdateBuilder.Setup
+    .Expect.Once.When.AddWhereField('IntegerProperty');
+  FUpdateBuilder.Setup
+    .Expect.Once.When.AddFieldParam('StringProperty');
+  FUpdateBuilder.Setup
+    .Expect.Once.When.AddUpdateInto('SomeTestData');
+
+  LCache := TStatementCache.Create(FStatementBuilderFactory);
+
+  Assert.AreEqual(
+    CTestUpdateStatement,
+    LCache.GetStatement(stUpdate, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual(
+    CTestUpdateStatement,
+    LCache.GetStatement(stUpdate, TSomeTestDataObject)
+  );
+
+  Assert.AreEqual('', FUpdateBuilder.CheckExpectations);
+  Assert.AreEqual('', FStatementBuilderFactory.CheckExpectations);
+end;
+
+procedure TTestStatementCache.Setup;
+begin
+  FSelectBuilder := TMock<ISelectBuilder>.Create;
+  FSelectBuilder.Setup
+    .WillReturn(CTestSelectStatement).When.Generate;
+
+  FUpdateBuilder := TMock<IUpdateInsertBuilder>.Create;
+  FUpdateBuilder.Setup
+    .WillReturn(CTestUpdateStatement).When.Generate;
+
+  FInsertBuilder := TMock<IUpdateInsertBuilder>.Create;
+  FInsertBuilder.Setup
+    .WillReturn(CTestInsertStatement).When.Generate;
+
+  FStatementBuilderFactory := TMock<IStatementBuilderFactory>.Create;
+  FStatementBuilderFactory.Setup
+    .WillReturn(FSelectBuilder.InstanceAsValue).When.CreateSelectBuilder;
+  FStatementBuilderFactory.Setup
+    .WillReturn(FUpdateBuilder.InstanceAsValue).When.CreateUpdateBuilder;
+  FStatementBuilderFactory.Setup
+    .WillReturn(FInsertBuilder.InstanceAsValue).When.CreateInsertBuilder;
 end;
 
 initialization

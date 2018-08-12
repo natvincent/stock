@@ -92,6 +92,7 @@
         <DCCReference Include="Source\Persistence.ConnectionFactory.pas"/>
         <DCCReference Include="Source\Persistence.Context.pas"/>
         <DCCReference Include="Source\Persistence.Consts.pas"/>
+        <DCCReference Include="Source\Persistence.StatementCache.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

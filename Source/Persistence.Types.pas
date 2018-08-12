@@ -9,6 +9,16 @@ uses
 type
 
   TDataState = (dsClean, dsDirty, dsNew);
+  TStatementType = (stSelect, stInsert, stUpdate);
+
+const
+  CStateToStatementTypeMap: array [TDataState] of TStatementType = (
+    stSelect,
+    stUpdate,
+    stInsert
+  );
+
+type
 
   TTableNameAttribute = class (TCustomAttribute)
   private
@@ -20,19 +30,11 @@ type
   end;
   TableNameAttribute = TTableNameAttribute;
 
-  TJoinOnAttribute = class (TCustomAttribute)
-  private
-    FJoinTo: string;
-    FJoinFrom: string;
-  public
-    constructor Create(
-      const AFromProperty: string;
-      const AToProperty: string
-    );
-    property JoinFrom: string read FJoinFrom;
-    property JoinTo: string read FJoinTo;
-  end;
-  JoinOnAttribute = TJoinOnAttribute;
+  TKeyFieldAttribute = class (TCustomAttribute);
+  KeyFieldAttribute = TKeyFieldAttribute;
+
+  TIdentityFieldAttribute = class (TKeyFieldAttribute);
+  IdentityFieldAttribute = TIdentityFieldAttribute;
 
   TDataObject = class
   private
@@ -64,6 +66,8 @@ type
     destructor Destroy; override;
 
     function ListClass: TDataObjectClass; virtual; abstract;
+
+    function GetEnumerator: TEnumerator<TDataObject>;
 
     function Add(const ADataObject: TDataObject): integer;
     procedure Delete(const AIndex: integer);
@@ -162,6 +166,11 @@ begin
   result := FList.Count;
 end;
 
+function TDataObjectList.GetEnumerator: TEnumerator<TDataObject>;
+begin
+  result := FList.GetEnumerator;
+end;
+
 function TDataObjectList.GetItem(const AIndex: integer): TDataObject;
 begin
   result := FList[AIndex];
@@ -173,18 +182,6 @@ constructor TTableNameAttribute.Create(const ATableName: string);
 begin
   inherited Create;
   FTableName := ATableName;
-end;
-
-{ TJoinOnAttribute }
-
-constructor TJoinOnAttribute.Create(
-  const AFromProperty: string;
-  const AToProperty: string
-);
-begin
-  inherited Create;
-  FJoinFrom := AFromProperty;
-  FJoinTo := AToProperty;
 end;
 
 end.

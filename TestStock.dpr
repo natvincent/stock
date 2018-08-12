@@ -18,7 +18,8 @@ uses
   Persistence.DB in 'Source\Persistence.DB.pas',
   Persistence.ConnectionFactory in 'Source\Persistence.ConnectionFactory.pas',
   Persistence.Context in 'Source\Persistence.Context.pas',
-  Persistence.Consts in 'Source\Persistence.Consts.pas';
+  Persistence.Consts in 'Source\Persistence.Consts.pas',
+  Persistence.StatementCache in 'Source\Persistence.StatementCache.pas';
 
 var
   runner : ITestRunner;

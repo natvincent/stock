@@ -66,6 +66,7 @@ type
     {$ENDREGION}
 
     function CreateQuery: IQuery;
+    function GetLastIdentityValue: int64;
 
     property Database: string read GetDatabase write SetDatabase;
   end;
@@ -76,10 +77,13 @@ type
 
   end;
 
+  ESaveObjectError = class (EPersistenceException);
+  EOnlyOneIdentityPropertyAllowed = class (ESaveObjectError);
+
   IContext = interface
     ['{33ADAA65-E3D6-498D-96E8-2CC0C380E6FC}']
     procedure Load(const AList: TDataObjectList);
-
+    procedure Save(const AList: TDataObjectList);
   end;
 
   EQueryBuilderException = class (EPersistenceException);
@@ -103,6 +107,29 @@ type
     procedure AddUpdateInto(const ATableName: string);
     procedure AddWhereField(const AFieldAndParamName: string);
     function Generate: string;
+  end;
+
+  IStatementBuilderFactory = interface
+    ['{CD22228C-69A3-4828-99A8-4D420D6B3E9E}']
+    function CreateSelectBuilder: ISelectBuilder;
+    function CreateInsertBuilder: IUpdateInsertBuilder;
+    function CreateUpdateBuilder: IUpdateInsertBuilder;
+  end;
+
+  EStatementCacheException = class (EPersistenceException);
+  ETableNameAttributeNotFound = class (EStatementCacheException);
+
+  IStatementCache = interface
+    ['{A47A657C-24CE-4880-A4F9-CC3FDBEF22C8}']
+    function GetStatement(
+      const AStatementType: TStatementType;
+      const AForClass: TDataObjectClass
+    ): string;
+    procedure AddStatement(
+      const AStatementType: TStatementType;
+      const AForClass: TDataObjectClass;
+      const AStatement: string
+    );
   end;
 
 implementation

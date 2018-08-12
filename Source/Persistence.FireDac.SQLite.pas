@@ -22,6 +22,7 @@ type
     function GetDatabase: string;
     procedure SetDatabase(const AValue: string);
     function CreateQuery: IQuery;
+    function GetLastIdentityValue: Int64;
 
   public
     constructor Create;
@@ -125,6 +126,13 @@ type
   public
     constructor Create; 
     destructor Destroy; override;
+  end;
+  
+  TSQLiteStatementBuilderFactory = class (TInterfacedObject, IStatementBuilderFactory)
+  private
+    function CreateInsertBuilder: IUpdateInsertBuilder;
+    function CreateSelectBuilder: ISelectBuilder;
+    function CreateUpdateBuilder: IUpdateInsertBuilder;
   end;
   
 implementation
@@ -248,6 +256,11 @@ end;
 function TFireDACConnection.GetDatabase: string;
 begin
   result := FConnection.Params.Database;
+end;
+
+function TFireDACConnection.GetLastIdentityValue: Int64;
+begin
+  result := 0;
 end;
 
 procedure TFireDACConnection.SetDatabase(const AValue: string);
@@ -494,6 +507,23 @@ begin
   result := 'update ' + FUpdateTable + ' set'
   + GenerateSet
   + GenerateWhere;
+end;
+
+{ TSQLiteStatementBuilderFactory }
+
+function TSQLiteStatementBuilderFactory.CreateInsertBuilder: IUpdateInsertBuilder;
+begin
+  result := TSQLiteInsertBuilder.Create;
+end;
+
+function TSQLiteStatementBuilderFactory.CreateSelectBuilder: ISelectBuilder;
+begin
+  result := TSQLiteSelectBuilder.Create;
+end;
+
+function TSQLiteStatementBuilderFactory.CreateUpdateBuilder: IUpdateInsertBuilder;
+begin
+  result := TSQLiteUpdateBuilder.Create;
 end;
 
 end.
