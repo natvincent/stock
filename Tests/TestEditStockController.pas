@@ -23,6 +23,7 @@ type
     [Test] procedure NewItem;
     [Test] procedure SaveItem;
     [Test] procedure DontLevelWhenNoChange;
+    [Test] procedure IsNew;
   end;
 
 implementation
@@ -61,6 +62,19 @@ begin
   LController.SaveItem;
 
   Assert.AreEqual('', FContext.CheckExpectations);
+end;
+
+procedure TTestEditStockController.IsNew;
+var
+  LController: IEditItemController;
+begin
+  LController := TEditItemController.Create(FContext);
+
+  Assert.IsFalse(LController.IsNewItem);
+
+  LController.NewItem;
+
+  Assert.IsTrue(LController.IsNewItem);
 end;
 
 procedure TTestEditStockController.LoadItem;

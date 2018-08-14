@@ -1,7 +1,7 @@
 object StockHistoryForm: TStockHistoryForm
   Left = 0
   Top = 0
-  Caption = 'StockHistoryForm'
+  Caption = 'Stock History'
   ClientHeight = 291
   ClientWidth = 298
   Color = clBtnFace

@@ -85,6 +85,7 @@ begin
   try
     LForm.Controller := TEditItemController.Create(AContext);
     LForm.Controller.NewItem;
+    LForm.Load;
     result := LForm.ShowModal = mrOK;
   finally
     LForm.Free;
@@ -122,6 +123,8 @@ begin
   NameEdit.Text := Controller.Item.Name;
   DescriptionMemo.Lines.Text := Controller.Item.Description;
   OnHandEdit.Text := IntToStr(Controller.StockLevel);
+  if FController.IsNewItem then
+    Caption := 'New Item';
 end;
 
 procedure TEditItemForm.SetController(const Value: IEditItemController);

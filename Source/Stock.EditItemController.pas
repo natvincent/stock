@@ -22,6 +22,7 @@ type
     procedure LoadItem(const AStockItemID: Integer);
     procedure SaveItem;
     procedure NewItem;
+    function GetIsNewItem: Boolean;
   public
     constructor Create(const AContext: IContext);
     destructor Destroy; override;
@@ -49,6 +50,11 @@ begin
   FOnHand.Free;
   FStockItem.Free;
   inherited;
+end;
+
+function TEditItemController.GetIsNewItem: Boolean;
+begin
+  result := FStockItem.DataState = dsNew;
 end;
 
 function TEditItemController.GetItem: TStockItem;

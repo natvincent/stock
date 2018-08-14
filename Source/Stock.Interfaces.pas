@@ -43,12 +43,14 @@ type
     function GetItem: TStockItem;
     function GetStockLevel: integer;
     procedure SetStockLevel(const ALevel: integer);
+    function GetIsNewItem: boolean;
     {$ENDREGION}
 
     procedure NewItem;
     procedure LoadItem(const AStockItemID: integer);
     procedure SaveItem;
 
+    property IsNewItem: boolean read GetIsNewItem;
     property StockLevel: integer read GetStockLevel write SetStockLevel;
     property Item: TStockItem read GetItem;
   end;
