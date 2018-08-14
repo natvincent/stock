@@ -26,6 +26,7 @@
 		<pathelement dir="lib\Delphi-Mocks\"/>
 		<pathelement dir="lib\Virtual-TreeView\Source\"/>
 		<pathelement dir="lib\PngComponents\Source\"/>
+		<pathelement dir="lib\DUnitX\Source\"/>
 	</unitpath>
 
 	<target name="build" depends="clean, compile, test, database, installer"/>
