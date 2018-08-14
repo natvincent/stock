@@ -185,6 +185,16 @@
 
     <target name="installer" depends="compile, test" >
         <innosetup script="SetupStock.iss" />
+
+        <zip zipfile="${exe-output-directory}\Stock.zip">
+        	<fileset basedir="${exe-output-directory}">
+        	  <include name="Stock.exe" />
+        	  <include name="TestStock.exe" />
+        	</fileset>
+        	<fileset basedir="${data-build-directory}" prefix="data">
+        	  <include name="Stock.sdb" />
+        	</fileset>
+        </zip>
     </target>
 
 </project>
