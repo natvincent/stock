@@ -9,6 +9,9 @@
         <Projects Include="Stock.dproj">
             <Dependencies/>
         </Projects>
+        <Projects Include="DatabaseBuilder.dproj">
+            <Dependencies/>
+        </Projects>
     </ItemGroup>
     <ProjectExtensions>
         <Borland.Personality>Default.Personality.12</Borland.Personality>
@@ -35,14 +38,23 @@
     <Target Name="Stock:Make">
         <MSBuild Projects="Stock.dproj" Targets="Make"/>
     </Target>
+    <Target Name="DatabaseBuilder">
+        <MSBuild Projects="DatabaseBuilder.dproj"/>
+    </Target>
+    <Target Name="DatabaseBuilder:Clean">
+        <MSBuild Projects="DatabaseBuilder.dproj" Targets="Clean"/>
+    </Target>
+    <Target Name="DatabaseBuilder:Make">
+        <MSBuild Projects="DatabaseBuilder.dproj" Targets="Make"/>
+    </Target>
     <Target Name="Build">
-        <CallTarget Targets="TestStock;Stock"/>
+        <CallTarget Targets="TestStock;Stock;DatabaseBuilder"/>
     </Target>
     <Target Name="Clean">
-        <CallTarget Targets="TestStock:Clean;Stock:Clean"/>
+        <CallTarget Targets="TestStock:Clean;Stock:Clean;DatabaseBuilder:Clean"/>
     </Target>
     <Target Name="Make">
-        <CallTarget Targets="TestStock:Make;Stock:Make"/>
+        <CallTarget Targets="TestStock:Make;Stock:Make;DatabaseBuilder:Make"/>
     </Target>
     <Import Project="$(BDS)\Bin\CodeGear.Group.Targets" Condition="Exists('$(BDS)\Bin\CodeGear.Group.Targets')"/>
 </Project>

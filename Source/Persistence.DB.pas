@@ -24,6 +24,14 @@ type
 
   end;
 
+  TEchoStatementBuilder = class (TStatementBuilder)
+  private
+    FStatement: string;
+  public
+    constructor Create(const AStatement: string);
+    function Generate: string; override;
+  end;
+
 implementation
 
 { TPersistenceField }
@@ -49,6 +57,19 @@ end;
 
 procedure TStatementBuilder.AddAdditionalWhereAnd(const APredicate: string);
 begin
+end;
+
+{ TEchoStatementBuilder }
+
+constructor TEchoStatementBuilder.Create(const AStatement: string);
+begin
+  inherited Create;
+  FStatement := AStatement;
+end;
+
+function TEchoStatementBuilder.Generate: string;
+begin
+  result := FStatement;
 end;
 
 end.

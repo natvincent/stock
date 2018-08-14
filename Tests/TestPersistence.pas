@@ -21,6 +21,7 @@ type
     [Test] procedure SetSQL;
     [Test] procedure OpenAndReadFields;
     [Test] procedure SetParametersAndExecute;
+    [Test] procedure FindParam;
 
   end;
 
@@ -35,6 +36,12 @@ type
     [Test] procedure DatabaseName;
     [Test] procedure CreateQuery;
 
+  end;
+
+  [TestFixture]
+  TTestConnectionFactory = class
+  public
+    [Test] procedure DatabasePathMustBeSet;
   end;
 
   [TestFixture]
@@ -68,8 +75,11 @@ type
 
     [Test] procedure CreateContext;
     [Test] procedure LoadObjects;
+    [Test] procedure LoadClearsList;
     [Test] procedure LoadObjectsWithCriteria;
+    [Test] procedure LoadObject;
     [Test] procedure SaveObjects;
+    [Test] procedure SaveObject;
     [Test] procedure SaveNewObjectUpdatesKey;
   end;
 
@@ -116,6 +126,12 @@ type
   end;
 
   [TestFixture]
+  TTestEchoBuilder = class
+  public
+    [Test] procedure ReturnsWhatItWasGiven;
+  end;
+
+  [TestFixture]
   TestEndToEnd = class
   private
     FFDQuery: TFDQuery;
@@ -126,6 +142,10 @@ type
     [TearDown] procedure TearDown;
 
     [Test] procedure TestEndToEnd;
+    [Test] procedure TestGetLastIdentityValue;
+    [Test] procedure SaveNewLevel;
+    [Test] procedure LoadLevel;
+    [Test] procedure LoadOnHand;
 
   end;
 
@@ -139,7 +159,10 @@ uses
   Persistence.Context,
   System.Classes,
   System.Rtti,
-  Persistence.StatementCache;
+  Persistence.StatementCache,
+  Persistence.DB,
+  Stock.Domain,
+  Stock.DomainQueries;
 
 const
   CDatabaseFilename = 'TestDatabase.sdb';
@@ -184,6 +207,27 @@ end;
 procedure TestQuery.TearDown;
 begin
   FFDConnection.Free;
+end;
+
+procedure TestQuery.FindParam;
+var
+  LQuery: IQuery;
+  LParam: IParam;
+begin
+  LQuery := TFireDACQuery.Create(FFDQuery);
+
+  LQuery.SQL :=
+              'insert into stock ('
+   + #13#10 + '  Name,'
+   + #13#10 + '  Description'
+   + #13#10 + ') values ('
+   + #13#10 + '  :Name,'
+   + #13#10 + '  :Description'
+   + #13#10 + ')';
+
+  Assert.IsTrue(LQuery.FindParam('Name', LParam));
+
+  Assert.IsFalse(LQuery.FindParam('Blah', LParam));
 end;
 
 procedure TestQuery.OpenAndReadFields;
@@ -288,10 +332,116 @@ end;
 
 { TestEndToEnd }
 
+procedure TestEndToEnd.LoadLevel;
+var
+  LConnectionFactory: IConnectionFactory;
+  LStatementCache: IStatementCache;
+  LStatementBuilderFactory: IStatementBuilderFactory;
+  LContext: IContext;
+  LLevelList: TStockLevelList;
+begin
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+  LConnectionFactory.DatabasePath := CDatabaseFilename;
+  LStatementBuilderFactory := TSQLiteStatementBuilderfactory.Create;
+  LStatementCache := TStatementCache.Create(LStatementBuilderFactory);
+
+  LContext := TContext.Create(
+    LConnectionFactory,
+    LStatementCache
+  );
+
+  LLevelList := TStockLevelList.Create;
+  try
+    LContext.Load(LLevelList);
+
+    Assert.AreEqual(2, LLevelList.Count);
+    Assert.AreEqual(30, LLevellist[0].OnHand);
+    Assert.AreEqual(2, LLevelList[0].StockItemID);
+    Assert.AreNotEqual<TDateTime>(0, LLevelList[0].DateTime);
+
+  finally
+    LLevelList.Free;
+  end;
+end;
+
+procedure TestEndToEnd.LoadOnHand;
+var
+  LConnectionFactory: IConnectionFactory;
+  LStatementCache: IStatementCache;
+  LStatementBuilderFactory: IStatementBuilderFactory;
+  LContext: IContext;
+  LOnHand: TStockItemsOnHand;
+begin
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+  LConnectionFactory.DatabasePath := CDatabaseFilename;
+  LStatementBuilderFactory := TSQLiteStatementBuilderfactory.Create;
+  LStatementCache := TStatementCache.Create(LStatementBuilderFactory);
+
+  LStatementCache.AddStatement(
+    stSelect,
+    TStockItemsOnHand,
+    LStatementBuilderFactory.CreateEchoBuilder(CStockItemsOnHand)
+  );
+
+  LContext := TContext.Create(
+    LConnectionFactory,
+    LStatementCache
+  );
+
+  LOnHand := TStockItemsOnHand.Create;
+  try
+    LContext.Load(LOnHand, 2);
+
+    Assert.AreEqual(40, LOnHand.OnHand);
+  finally
+    LOnHand.Free;
+  end;
+end;
+
+procedure TestEndToEnd.SaveNewLevel;
+var
+  LConnectionFactory: IConnectionFactory;
+  LConnection: IConnection;
+  LStatementCache: IStatementCache;
+  LStatementBuilderFactory: IStatementBuilderFactory;
+  LContext: IContext;
+  LLevel: TStockLevel;
+  LQuery: IQuery;
+begin
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+  LConnectionFactory.DatabasePath := CDatabaseFilename;
+  LStatementBuilderFactory := TSQLiteStatementBuilderfactory.Create;
+  LStatementCache := TStatementCache.Create(LStatementBuilderFactory);
+
+  LContext := TContext.Create(
+    LConnectionFactory,
+    LStatementCache
+  );
+
+  LLevel := TStockLevel.CreateNew;
+  try
+    LLevel.OnHand := 20;
+
+    LContext.Save(LLevel);
+
+    LConnection := LConnectionFactory.CreateConnection;
+    LQuery := LConnection.CreateQuery;
+    LQuery.SQL := 'select * from StockLevels where StockLevelID = :StockLevelID';
+    LQuery.ParamByName('StockLevelID').AsInteger := LLevel.StockLevelID;
+    LQuery.Open;
+    Assert.IsFalse(LQuery.EOF);
+    Assert.AreEqual(1, LQuery.RecordCount);
+    Assert.AreEqual(20, LQuery.FieldByName('OnHand').AsInteger);
+  finally
+    LLevel.Free;
+  end;
+
+end;
+
 procedure TestEndToEnd.Setup;
 begin
   if FileExists(CDatabaseFilename) then
-    DeleteFile(CDatabaseFilename);
+    Assert.IsTrue(DeleteFile(CDatabaseFilename));
 
   FFDConnection := TFDConnection.Create(nil);
   FFDConnection.DriverName := 'SQLite';
@@ -302,7 +452,7 @@ begin
 
   FFDConnection.ExecSQL(
               'create table stock ('
-   + #13#10 + '  StockItemID integer primary key,'
+   + #13#10 + '  StockItemID integer primary key autoincrement,'
    + #13#10 + '  Name varchar(200),'
    + #13#10 + '  Description text'
    + #13#10 + ')'
@@ -314,6 +464,33 @@ begin
    + #13#10 + ') values ('
    + #13#10 + '  ''Broccoli'','
    + #13#10 + '  ''Just another Brasicca'''
+   + #13#10 + ')'
+  );
+
+  FFDConnection.ExecSQL(
+              'create table stocklevels ('
+   + #13#10 + '  StockLevelID integer primary key autoincrement,'
+   + #13#10 + '  StockItemID integer,'
+   + #13#10 + '  OnHand integer ,'
+   + #13#10 + '  DateTime varchar(24) default current_timestamp'
+   + #13#10 + ')'
+  );
+  FFDConnection.ExecSQL(
+              'insert into stocklevels ('
+   + #13#10 + '  OnHand,'
+   + #13#10 + '  StockItemID'
+   + #13#10 + ') values ('
+   + #13#10 + '  30,'
+   + #13#10 + '  2'
+   + #13#10 + ')'
+  );
+  FFDConnection.ExecSQL(
+              'insert into stocklevels ('
+   + #13#10 + '  OnHand,'
+   + #13#10 + '  StockItemID'
+   + #13#10 + ') values ('
+   + #13#10 + '  40,'
+   + #13#10 + '  2'
    + #13#10 + ')'
   );
   FFDQuery := TFDQuery.Create(nil);
@@ -332,7 +509,8 @@ var
   LConnection: IConnection;
   LQuery: IQuery;
 begin
-  LConnectionFactory := TFireDACConnectionFactory.Create(CDatabaseFilename);
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+  LConnectionFactory.DatabasePath := CDatabaseFilename;
 
   LConnection := LConnectionFactory.CreateConnection;
 
@@ -349,6 +527,34 @@ begin
   Assert.IsFalse(LQuery.EOF);
 
   Assert.AreEqual('Just another Brasicca', LQuery.FieldByName('Description').AsString);
+end;
+
+procedure TestEndToEnd.TestGetLastIdentityValue;
+var
+  LConnectionFactory: IConnectionFactory;
+  LConnection: IConnection;
+  LQuery: IQuery;
+begin
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+  LConnectionFactory.DatabasePath := CDatabaseFilename;
+
+  LConnection := LConnectionFactory.CreateConnection;
+
+  LQuery := LConnection.CreateQuery;
+
+  LQuery.SQL :=
+               'insert into stock ('
+    + #13#10 + '  name,'
+    + #13#10 + '  description'
+    + #13#10 + ') values ('
+    + #13#10 + '  ''Mushrooms'','
+    + #13#10 + '  ''Fungus'''
+    + #13#10 + ')';
+
+  LQuery.Execute;
+
+  Assert.AreEqual<int64>(2, LConnection.GetLastIdentityValue);
+
 end;
 
 { TTestDataObject }
@@ -368,7 +574,19 @@ type
     property StringProperty: string read FStringProperty write SetStringProperty;
 
     [KeyField]
+    [IdentityField]
     property IntegerProperty: integer read FIntegerProperty write SetIntegerProperty;
+
+  end;
+
+  [TableName('SomeTestData')]
+  TAnotherTestDataObject = class (TSomeTestDataObject)
+  private
+    FAnotherIntegerProperty: integer;
+
+  published
+    [ReadOnlyField]
+    property AnotherIntegerProperty: integer read FAnotherIntegerProperty write FAnotherIntegerProperty;
   end;
   {$m-}
 
@@ -497,15 +715,104 @@ const
    + #13#10 + '  SomeTestData';
 
 
+procedure TTestContext.LoadClearsList;
+var
+  LContext: IContext;
+  LList: TDataObjectList<TSomeTestDataObject>;
+  LItem: TSomeTestDataObject;
+begin
+  FQuery.Setup.WillReturn(True).When.GetEOF;
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  LList := TDataObjectList<TSomeTestDataObject>.Create;
+  try
+    LItem := TSomeTestDataObject.Create;
+    LList.Add(LItem);
+    LItem := TSomeTestDataObject.Create;
+    LList.Add(LItem);
+    LItem := TSomeTestDataObject.Create;
+    LList.Add(LItem);
+
+    LContext.Load(LList);
+
+    Assert.AreEqual(0, LList.Count);
+  finally
+    LList.Free;
+  end;
+end;
+
+procedure TTestContext.LoadObject;
+var
+  LField: TMock<IField>;
+  LParam: TMock<IParam>;
+  LContext: IContext;
+  LItem: TSomeTestDataObject;
+const
+  CSomeID = 42;
+begin
+  FConnection.Setup.Expect.Once.When.CreateQuery;
+
+  LField := TMock<IField>.Create;
+  LField.Setup.Expect.Once.When.GetAsString;
+  LField.Setup.WillReturn('Some data').When.GetAsString;
+
+  LField.Setup.Expect.Once.When.GetAsInteger;
+  LField.Setup.WillReturn(42).When.GetAsInteger;
+
+  LParam := TMock<IParam>.Create;
+  LParam.Setup
+    .Expect.Once.When.SetAsInteger(CSomeID);
+
+  FQuery.Setup.Expect.Once.When.SQL := CContextTestSelectStatement;
+
+  FQuery.Setup.Expect.Once.When.Open;
+  FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
+  FQuery.Setup.WillReturn(False).When.GetEof;
+  FQuery.Setup.Expect.Once.When.FieldByName('StringProperty');
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('StringProperty');
+
+  FQuery.Setup.Expect.Once.When.FieldByName('IntegerProperty');
+  FQuery.Setup
+    .WillReturn(LField.InstanceAsValue).When.FieldByName('IntegerProperty');
+
+  FQuery.Setup
+    .Expect.Once.When.ParamByName('IntegerProperty');
+  FQuery.Setup
+    .WillReturn(LParam.InstanceAsValue).When.ParamByName('IntegerProperty');
+
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stSelect, TSomeTestDataObject);
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  LItem := TSomeTestDataObject.Create;
+  try
+    Assert.IsTrue(LContext.Load(LItem, CSomeID));
+
+    Assert.AreEqual('Some data', LItem.StringProperty);
+    Assert.AreEqual(CSomeID, LItem.IntegerProperty);
+    Assert.AreEqual(dsClean, LItem.DataState);
+  finally
+    Litem.Free;
+  end;
+
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FStatementCache.CheckExpectations);
+  Assert.AreEqual('', FQuery.CheckExpectations);
+  Assert.AreEqual('', LField.CheckExpectations);
+end;
+
 procedure TTestContext.LoadObjects;
 var
   LField: TMock<IField>;
   LContext: IContext;
   LList: TDataObjectList<TSomeTestDataObject>;
-  LItem: TSomeTestDataObject;
   LLoopCount: integer;
+  LNextCount: integer;
 begin
   LLoopCount := 1;
+  LNextCount := 1;
   FConnection.Setup.Expect.Once.When.CreateQuery;
 
   LField := TMock<IField>.Create;
@@ -519,12 +826,21 @@ begin
 
   FQuery.Setup.Expect.Once.When.Open;
   FQuery.Setup.Expect.AtLeastOnce.When.GetEOF;
+  FQuery.Setup.Expect.Once.When.Next;
   FQuery.Setup.WillExecute(
     'GetEOF',
     function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
     begin
       result := LLoopCount = 0;
+      Assert.AreEqual(LLoopCount, LNextCount);
       dec(LLoopCount);
+    end
+  );
+  FQuery.Setup.WillExecute(
+    'Next',
+    function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+    begin
+      dec(LNextCount);
     end
   );
   FQuery.Setup.Expect.Once.When.FieldByName('StringProperty');
@@ -569,7 +885,6 @@ var
   LField: TMock<IField>;
   LContext: IContext;
   LList: TDataObjectList<TSomeTestDataObject>;
-  LItem: TSomeTestDataObject;
   LLoopCount: integer;
 begin
   LLoopCount := 1;
@@ -670,9 +985,17 @@ begin
     .WillReturn(CTestIdentity).When.GetLastIdentityValue;
 
   FQuery.Setup
-    .WillReturn(LStringParam.InstanceAsValue).When.ParamByName('StringProperty');
-  FQuery.Setup
-    .WillReturn(LIntegerParam.InstanceAsValue).When.ParamByName('ID');
+    .WillExecute(
+      'FindParam',
+      function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+      begin
+        result := True;
+        if args[1].AsString = 'StringProperty' then
+          args[2] := LStringParam.InstanceAsValue
+        else if args[1].AsString = 'ID' then
+          args[2] := LIntegerParam.InstanceAsValue;
+      end
+    );
 
   LContext := TContext.Create(FConnectionFactory, FStatementCache);
 
@@ -717,6 +1040,70 @@ const
     + #13#10 + 'where'
     + #13#10 + '  IntegerProperty = :IntegerProperty';
 
+procedure TTestContext.SaveObject;
+var
+  LStringParam: TMock<IParam>;
+  LIntegerParam: TMock<IParam>;
+  LContext: IContext;
+  LItem: TSomeTestDataObject;
+begin
+  LStringParam := TMock<IParam>.Create;
+  LStringParam.Setup
+    .Expect.Once.When.SetAsString('String Value 1');
+
+  LIntegerParam := TMock<IParam>.Create;
+  LIntegerParam.Setup
+    .Expect.Once.When.SetAsInteger(42);
+
+  FConnection.Setup
+    .Expect.Exactly(1).When.CreateQuery;
+
+  FQuery.Setup
+    .WillExecute(
+      'FindParam',
+      function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+      begin
+        result := True;
+        if args[1].AsString = 'StringProperty' then
+          args[2] := LStringParam.InstanceAsValue
+        else if args[1].AsString = 'IntegerProperty' then
+          args[2] := LIntegerParam.InstanceAsValue;
+      end
+    );
+  FQuery.Setup
+    .Expect.Exactly('FindParam', 2);
+
+  FQuery.Setup
+    .Expect.Once.When.SetSQL(CContextTestInsertStatement);
+  FQuery.Setup
+    .Expect.Exactly(1).When.Execute;
+
+  FStatementCache.Setup
+    .Expect.Once.When.GetStatement(stInsert, TSomeTestDataObject);
+
+  LContext := TContext.Create(FConnectionFactory, FStatementCache);
+
+  LItem := TSomeTestDataObject.CreateNew;
+  try
+    LItem.StringProperty := 'String Value 1';
+    LItem.IntegerProperty := 42;
+
+    LContext.Save(LItem);
+
+    Assert.AreEqual(dsClean, LItem.DataState);
+
+  finally
+    LItem.Free;
+  end;
+
+  Assert.AreEqual('', FConnectionFactory.CheckExpectations);
+  Assert.AreEqual('', FConnection.CheckExpectations);
+  Assert.AreEqual('', FStatementCache.CheckExpectations);
+  Assert.AreEqual('', LStringParam.CheckExpectations);
+  Assert.AreEqual('', LIntegerParam.CheckExpectations);
+  Assert.AreEqual('', FQuery.CheckExpectations);
+end;
+
 procedure TTestContext.SaveObjects;
 var
   LStringParam: TMock<IParam>;
@@ -741,14 +1128,19 @@ begin
     .Expect.Exactly(2).When.CreateQuery;
 
   FQuery.Setup
-    .WillReturn(LStringParam.InstanceAsValue).When.ParamByName('StringProperty');
+    .WillExecute(
+      'FindParam',
+      function (const args : TArray<TValue>; const ReturnType : TRttiType) : TValue
+      begin
+        result := True;
+        if args[1].AsString = 'StringProperty' then
+          args[2] := LStringParam.InstanceAsValue
+        else if args[1].AsString = 'IntegerProperty' then
+          args[2] := LIntegerParam.InstanceAsValue;
+      end
+    );
   FQuery.Setup
-    .Expect.Exactly(2).When.ParamByName('StringProperty');
-
-  FQuery.Setup
-    .WillReturn(LIntegerParam.InstanceAsValue).When.ParamByName('IntegerProperty');
-  FQuery.Setup
-    .Expect.Exactly(2).When.ParamByName('IntegerProperty');
+    .Expect.Exactly('FindParam', 4);
 
   FQuery.Setup
     .Expect.Once.When.SetSQL(CContextTestInsertStatement);
@@ -801,6 +1193,8 @@ begin
   FConnection := TMock<IConnection>.Create;
   FConnection.Setup
     .WillReturn(FQuery.InstanceAsValue).When.CreateQuery;
+  FConnection.Setup
+    .WillReturnDefault('GetLastIdentityValue', 42);
 
   FConnectionFactory := TMock<IConnectionFactory>.Create;
   FConnectionFactory.Setup
@@ -1117,22 +1511,24 @@ begin
     .Expect.Once.When.CreateInsertBuilder;
 
   FInsertBuilder.Setup
-    .Expect.Once.When.AddFieldParam('IntegerProperty');
+    .Expect.Never.When.AddFieldParam('IntegerProperty'); //identity
   FInsertBuilder.Setup
     .Expect.Once.When.AddFieldParam('StringProperty');
   FInsertBuilder.Setup
     .Expect.Once.When.AddUpdateInto('SomeTestData');
+  FInsertBuilder.Setup
+    .Expect.Never.When.AddUpdateInto('AnotherIntegerProperty'); //read only
 
   LCache := TStatementCache.Create(FStatementBuilderFactory);
 
   Assert.AreSame(
     FInsertBuilder,
-    LCache.GetStatement(stInsert, TSomeTestDataObject)
+    LCache.GetStatement(stInsert, TAnotherTestDataObject)
   );
 
   Assert.AreSame(
     FInsertBuilder,
-    LCache.GetStatement(stInsert, TSomeTestDataObject)
+    LCache.GetStatement(stInsert, TAnotherTestDataObject)
   );
 
   Assert.AreEqual('', FInsertBuilder.CheckExpectations);
@@ -1229,6 +1625,52 @@ begin
     .WillReturn(FUpdateBuilder.InstanceAsValue).When.CreateUpdateBuilder;
   FStatementBuilderFactory.Setup
     .WillReturn(FInsertBuilder.InstanceAsValue).When.CreateInsertBuilder;
+end;
+
+{ TTestEchoBuilder }
+
+procedure TTestEchoBuilder.ReturnsWhatItWasGiven;
+var
+  LEchoBuilder: IStatementBuilder;
+const
+  CTestStatement =
+               'select'
+    + #13#10 + '  *'
+    + #13#10 + 'from'
+    + #13#10 + '  table';
+begin
+  LEchoBuilder := TEchoStatementBuilder.Create(CTestStatement);
+
+  Assert.AreEqual(CTestStatement, LEchoBuilder.Generate);
+end;
+
+{ TTestConnectionFactory }
+
+procedure TTestConnectionFactory.DatabasePathMustBeSet;
+var
+  LConnectionFactory: IConnectionFactory;
+  LConnection: IConnection;
+const
+  CTestDatabasePath = 'C:\Projects\Stock\Data\Stock.sdb';
+begin
+  LConnectionFactory := TFireDACConnectionFactory.Create;
+
+  Assert.WillRaise(
+    procedure
+    begin
+      LConnection := LConnectionFactory.CreateConnection;
+    end,
+    EDatabasePathNotSet
+  );
+
+  LConnectionFactory.DatabasePath := CTestDatabasePath;
+
+  Assert.WillNotRaise(
+    procedure
+    begin
+      LConnection := LConnectionFactory.CreateConnection;
+    end
+  );
 end;
 
 initialization

@@ -4,7 +4,9 @@ interface
 
 uses
   Data.DB,
-  System.Generics.Collections;
+  System.Generics.Collections,
+  System.Generics.Defaults,
+  System.Rtti;
 
 type
 
@@ -35,6 +37,9 @@ type
 
   TIdentityFieldAttribute = class (TKeyFieldAttribute);
   IdentityFieldAttribute = TIdentityFieldAttribute;
+
+  TReadOnlyFieldAttribute = class (TCustomAttribute);
+  ReadOnlyFieldAttribute = TReadOnlyFieldAttribute;
 
   TDataObject = class
   private
@@ -71,6 +76,9 @@ type
 
     function Add(const ADataObject: TDataObject): integer;
     procedure Delete(const AIndex: integer);
+    function Extract(const AIndex: integer): TDataObject;
+    procedure Sort(const AComparer: IComparer<TDataObject>); overload;
+    procedure Clear;
 
     property Items[const AIndex: integer]: TDataObject read GetItem; default;
     property Count: integer read GetCount;
@@ -84,12 +92,41 @@ type
     function ListClass: TDataObjectClass; override;
 
     function Add(const ADataObject: T): integer;
+    function Extract(const AIndex: integer): T;
 
     property Items[const AIndex: integer]: T read GetItem; default;
 
   end;
 
+function IsIdentityProperty(const AProperty: TRttiProperty): boolean;
+function IsReadOnlyProperty(const AProperty: TRttiProperty): boolean;
+
 implementation
+
+function IsIdentityProperty(const AProperty: TRttiProperty): boolean;
+var
+  LAttribute: TCustomAttribute;
+begin
+  for LAttribute in AProperty.GetAttributes do
+  begin
+    if LAttribute is TIdentityFieldAttribute then
+      Exit(True);
+  end;
+  result := False;
+end;
+
+function IsReadOnlyProperty(const AProperty: TRttiProperty): boolean;
+var
+  LAttribute: TCustomAttribute;
+begin
+  for LAttribute in AProperty.GetAttributes do
+  begin
+    if LAttribute is TReadOnlyFieldAttribute then
+      Exit(True);
+  end;
+  result := False;
+end;
+
 
 { TDataObject }
 
@@ -127,6 +164,11 @@ begin
   result := FList.Add(ADataObject);
 end;
 
+function TDataObjectList<T>.Extract(const AIndex: integer): T;
+begin
+  result := T(inherited Extract(AIndex));
+end;
+
 function TDataObjectList<T>.GetItem(const AIndex: integer): T;
 begin
   result := T(inherited Items[AIndex]);
@@ -142,6 +184,11 @@ end;
 function TDataObjectList.Add(const ADataObject: TDataObject): integer;
 begin
   result := FList.Add(ADataObject);
+end;
+
+procedure TDataObjectList.Clear;
+begin
+  FList.Clear;
 end;
 
 constructor TDataObjectList.Create;
@@ -161,6 +208,11 @@ begin
   inherited;
 end;
 
+function TDataObjectList.Extract(const AIndex: integer): TDataObject;
+begin
+  result := FList.Extract(FList.Items[AIndex]);
+end;
+
 function TDataObjectList.GetCount: integer;
 begin
   result := FList.Count;
@@ -174,6 +226,11 @@ end;
 function TDataObjectList.GetItem(const AIndex: integer): TDataObject;
 begin
   result := FList[AIndex];
+end;
+
+procedure TDataObjectList.Sort(const AComparer: IComparer<TDataObject>);
+begin
+  FList.Sort(AComparer);
 end;
 
 { TTableNameAttribute }

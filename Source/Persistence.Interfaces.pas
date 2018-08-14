@@ -45,16 +45,21 @@ type
     function GetSQL: string;
     procedure SetSQL(const ASQL: string);
     function GetEOF: boolean;
+    function GetRecordCount: integer;
     {$ENDREGION}
 
     procedure Execute;
     procedure Open;
 
+    procedure Next;
+
     function FieldByName(const AName: string): IField;
     function ParamByName(const AName: string): IParam;
+    function FindParam(const AName: string; out AParam: IParam): boolean;
 
     property SQL: string read GetSQL write SetSQL;
     property EOF: boolean read GetEOF;
+    property RecordCount: integer read GetRecordCount;
   end;
 
   IConnection = interface
@@ -71,22 +76,38 @@ type
     property Database: string read GetDatabase write SetDatabase;
   end;
 
+  EDatabasePathNotSet = class (EPersistenceException);
+
   IConnectionFactory = interface
     ['{590AA342-D7F4-4F67-BE7D-CFCCBAF9010A}']
+
+    {$REGION 'Getters and Setters'}
+    function GetDatabasePath: string;
+    procedure SetDatabasePath(const APath: string);
+    {$ENDREGION}
+
     function CreateConnection: IConnection;
 
+    property DatabasePath: string read GetDatabasePath write SetDatabasePath;
   end;
 
   ESaveObjectError = class (EPersistenceException);
+  ELoadObjectError = class (EPersistenceException);
   EOnlyOneIdentityPropertyAllowed = class (ESaveObjectError);
+  EDataObjectMustHaveIntegerIdentity = class (ELoadObjectError);
 
   IContext = interface
     ['{33ADAA65-E3D6-498D-96E8-2CC0C380E6FC}']
     procedure Load(
       const AList: TDataObjectList;
       const ACriteria: string = ''
-    );
-    procedure Save(const AList: TDataObjectList);
+    ); overload;
+    function Load(
+      const ADataObject: TDataObject;
+      const AID: integer
+    ): boolean; overload;
+    procedure Save(const AList: TDataObjectList); overload;
+    procedure Save(const ADataObject: TDataObject); overload;
   end;
 
   IStatementBuilder = interface
@@ -124,6 +145,9 @@ type
     function CreateSelectBuilder: ISelectBuilder;
     function CreateInsertBuilder: IUpdateInsertBuilder;
     function CreateUpdateBuilder: IUpdateInsertBuilder;
+    function CreateEchoBuilder(
+      const AStatement: string
+    ): IStatementBuilder;
   end;
 
   EStatementCacheException = class (EPersistenceException);

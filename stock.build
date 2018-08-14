@@ -2,6 +2,7 @@
 
 	<property name="exe-output-directory" value=".\Win32\Release\" />
 	<property name="dcu-output-directory" value=".\Win32\Release\dcus" />
+	<property name="data-build-directory" value=".\Data" />
 
 	<property name="major-version" value="0" />
 	<property name="minor-version" value="1" />
@@ -24,16 +25,19 @@
 	<unitpath id="lib">
 		<pathelement dir="lib\Delphi-Mocks\"/>
 		<pathelement dir="lib\Virtual-TreeView\Source\"/>
+		<pathelement dir="lib\PngComponents\Source\"/>
 	</unitpath>
 
-	<target name="build" depends="clean, compile, test"/>
+	<target name="build" depends="clean, compile, test, database, installer"/>
 
 	<target name="clean">
 		<echo>Cleaning build files</echo>
 		<delete dir="${exe-output-directory}"/>
 		<delete dir="${dcu-output-directory}"/>
+		<delete dir="${data-build-directory}" />
 		<mkdir dir="${exe-output-directory}" />
 		<mkdir dir="${dcu-output-directory}" />
+		<mkdir dir="${data-build-directory}" />
 	</target>
 
 	<target name="compile" depends="clean">
@@ -47,10 +51,46 @@
 	      		<productversion major="${major-version}" minor="${minor-version}" release="${release}" build="${build}" text="${special-build}"/>
 	    		<fileversion major="${major-version}" minor="${minor-version}" release="${release}" build="${build}" text="${special-build}"/>
 			</versioninfo>
-			<!--resource name="MAINICON" type="ICON" file="stock.ico" /-->
-			<!--resource name="1" type="CUSTOM" customtype="24" file="stock.manifest" /-->
+			<resource name="MAINICON" type="ICON" file="stock.ico" />
+			<resource name="1" type="CUSTOM" customtype="24" file="stock.manifest" />
 		</buildresource>
 		
+		<dcc source="databasebuilder.dpr" 
+				version="tokyo" 
+				writecfg="true" 
+				console="false" 
+				debuginfo="exe" 
+				exeoutput="${exe-output-directory}" 
+				dcuoutput="${dcu-output-directory}" 
+				build="true" 
+				mapfile="detailed">
+			<compileroptions>
+			  <option name="L" value="False"/>
+			  <option name="D" value="True"/>
+			  <option name="Y" value="False"/>
+			  <option name="O" value="True"/>
+			  <option name="W" value="True"/>
+			  <option name="C" value="True"/>
+			</compileroptions>
+			<unitpath includedelphilib="true">
+				<path refid="lib" />
+			</unitpath>
+			<namespaces>
+				<namespace name="Vcl"/>
+				<namespace name="System"/>
+				<namespace name="Winapi"/>
+				<namespace name="System.Win"/>
+				<namespace name="Data"/>
+				<namespace name="Datasnap"/>
+				<namespace name="Vcl.Imaging"/>
+				<namespace name="Xml"/>
+				<namespace name="Soap"/>
+				<namespace name="Vcl.Samples"/>
+				<namespace name="VclTee"/>
+				<namespace name="IBX"/>
+			</namespaces>
+		</dcc>
+
 		<dcc source="teststock.dpr" 
 				version="tokyo" 
 				writecfg="true" 
@@ -134,5 +174,16 @@
 	<target name="test">
 		<exec program="${exe-output-directory}\teststock.exe"/>
 	</target>	
+
+	<target name="database" depends="compile" >
+		<exec program="${exe-output-directory}\databasebuilder.exe">
+  			<arg value=".\Scripts\BuildDatabase.sql" />
+  			<arg value="${data-build-directory}\Stock.sdb" />
+		</exec>
+	</target>
+
+    <target name="installer" depends="compile, test" >
+        <innosetup script="SetupStock.iss" />
+    </target>
 
 </project>

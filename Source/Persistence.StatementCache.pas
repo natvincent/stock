@@ -58,7 +58,8 @@ implementation
 
 uses
   Persistence.Consts,
-  Winapi.Windows;
+  Winapi.Windows,
+  System.TypInfo;
 
 { TStatementCache }
 
@@ -99,7 +100,10 @@ begin
   LInsertBuilder.AddUpdateInto(FindTableNameAttribute(LTypeInfo));
 
   for LProperty in LTypeInfo.GetProperties do
-    LInsertBuilder.AddFieldParam(LProperty.Name);
+    if (LProperty.Visibility = mvPublished)
+      and not IsIdentityProperty(LProperty)
+      and not IsReadOnlyProperty(LProperty) then
+      LInsertBuilder.AddFieldParam(LProperty.Name);
   
   result := LInsertBuilder;
 end;
@@ -108,7 +112,6 @@ function TStatementCache.CreateSelect(const AClass: TDataObjectClass): IStatemen
 var
   LSelectBuilder: ISelectBuilder;
   LTypeInfo: TRttiType;
-  LTableName: string;
   LProperty: TRttiProperty;
 begin
   LSelectBuilder := FStatementBuilderFactory.CreateSelectBuilder;
@@ -118,7 +121,8 @@ begin
   LSelectBuilder.AddFrom(FindTableNameAttribute(LTypeInfo));
 
   for LProperty in LTypeInfo.GetProperties do
-    LSelectBuilder.AddField(LProperty.Name);
+    if LProperty.Visibility = mvPublished then
+      LSelectBuilder.AddField(LProperty.Name);
 
   result := LSelectBuilder;
 end;
@@ -150,10 +154,13 @@ begin
 
   for LProperty in LTypeInfo.GetProperties do
   begin
-    if IsKeyProperty(LProperty) then
-      LUpdateBuilder.AddWhereField(LProperty.Name)
-    else
-      LUpdateBuilder.AddFieldParam(LProperty.Name);
+    if LProperty.Visibility = mvPublished then
+    begin
+      if IsKeyProperty(LProperty) then
+        LUpdateBuilder.AddWhereField(LProperty.Name)
+      else
+        LUpdateBuilder.AddFieldParam(LProperty.Name);
+    end;
   end;
 
   result := LUpdateBuilder;

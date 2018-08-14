@@ -24,7 +24,13 @@ uses
   Stock.Domain in 'Source\Stock.Domain.pas',
   Stock.Interfaces in 'Source\Stock.Interfaces.pas',
   Stock.StockListController in 'Source\Stock.StockListController.pas',
-  Stock.DomainQueries in 'Source\Stock.DomainQueries.pas';
+  Stock.DomainQueries in 'Source\Stock.DomainQueries.pas',
+  TestStockStartupController in 'Tests\TestStockStartupController.pas',
+  Stock.StartupController in 'Source\Stock.StartupController.pas',
+  TestEditStockController in 'Tests\TestEditStockController.pas',
+  Stock.EditItemController in 'Source\Stock.EditItemController.pas',
+  TestStockHistoryController in 'Tests\TestStockHistoryController.pas',
+  Stock.HistoryController in 'Source\Stock.HistoryController.pas';
 
 var
   runner : ITestRunner;

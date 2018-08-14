@@ -98,6 +98,12 @@
         <DCCReference Include="Source\Stock.Interfaces.pas"/>
         <DCCReference Include="Source\Stock.StockListController.pas"/>
         <DCCReference Include="Source\Stock.DomainQueries.pas"/>
+        <DCCReference Include="Tests\TestStockStartupController.pas"/>
+        <DCCReference Include="Source\Stock.StartupController.pas"/>
+        <DCCReference Include="Tests\TestEditStockController.pas"/>
+        <DCCReference Include="Source\Stock.EditItemController.pas"/>
+        <DCCReference Include="Tests\TestStockHistoryController.pas"/>
+        <DCCReference Include="Source\Stock.HistoryController.pas"/>
         <BuildConfiguration Include="Release">
             <Key>Cfg_2</Key>
             <CfgParent>Base</CfgParent>

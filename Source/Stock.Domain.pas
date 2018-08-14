@@ -7,39 +7,45 @@ uses
 
 type
 
+  {$m+}
   [TableName('Stock')]
   TStockItem = class (TDataObject)
   private
     FStockItemID: integer;
     FName: string;
     FDescription: string;
+    FProductID: string;
     procedure SetStockItemID(const Value: integer);
     procedure SetName(const Value: string);
     procedure SetDescription(const Value: string);
+    procedure SetProductID(const Value: string);
   published
     [IdentityField]
     property StockItemID: integer read FStockItemID write SetStockItemID;
+    property ProductID: string read FProductID write SetProductID;
     property Name: string read FName write SetName;
     property Description: string read FDescription write SetDescription;
   end;
 
   TStockItemList = class (TDataObjectList<TStockItem>);
 
+  [TableName('StockLevels')]
   TStockLevel = class (TDataObject)
   private
-    FLastChanged: TDateTime;
+    FDateTime: TDateTime;
     FOnHand: integer;
     FStockLevelID: integer;
     FStockItemID: integer;
-    procedure SetLastChanged(const Value: TDateTime);
+    procedure SetDateTime(const Value: TDateTime);
     procedure SetOnHand(const Value: integer);
     procedure SetStockLevelID(const Value: integer);
     procedure SetStockItemID(const Value: integer);
   published
+    [IdentityField]
     property StockLevelID: integer read FStockLevelID write SetStockLevelID;
     property StockItemID: integer read FStockItemID write SetStockItemID;
     property OnHand: integer read FOnHand write SetOnHand;
-    property LastChanged: TDateTime read FLastChanged write SetLastChanged;
+    property DateTime: TDateTime read FDateTime write SetDateTime;
   end;
 
   TStockLevelList = class (TDataObjectList<TStockLevel>);
@@ -53,8 +59,21 @@ type
 
   published
     property OnHand: integer read FOnHand write SetOnHand;
-    property LastLevelChange: TDateTime read FLastLevelChanged write SetLastLevelChanged;
+    property LastChanged: TDateTime read FLastLevelChanged write SetLastLevelChanged;
   end;
+
+  TStockListItemList = class (TDataObjectList<TStockListItem>);
+
+  TStockItemsOnHand = class (TDataObject)
+  private
+    FOnHand: integer;
+    FStockItemID: integer;
+  published
+    [IdentityField]
+    property StockItemID: integer read FStockItemID write FStockItemID;
+    property OnHand: integer read FOnHand write FOnHand;
+  end;
+  {$m-}
 
 implementation
 
@@ -71,6 +90,13 @@ procedure TStockItem.SetName(const Value: string);
 begin
   if Value = FName then Exit; //======>
   FName := Value;
+  Changed;
+end;
+
+procedure TStockItem.SetProductID(const Value: string);
+begin
+  if Value = FProductID then Exit; //======>
+  FProductID := Value;
   Changed;
 end;
 
@@ -99,10 +125,10 @@ end;
 
 { TSockLevel }
 
-procedure TStockLevel.SetLastChanged(const Value: TDateTime);
+procedure TStockLevel.SetDateTime(const Value: TDateTime);
 begin
-  if Value = FLastChanged then Exit; //======>
-  FLastChanged := Value;
+  if Value = FDateTime then Exit; //======>
+  FDateTime := Value;
   Changed;
 end;
 

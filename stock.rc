@@ -1,3 +1,5 @@
+MAINICON ICON "c:\Projects\Spikes\Stock\stock.ico"
+1 24 "c:\Projects\Spikes\Stock\stock.manifest"
 LANGUAGE             0, SUBLANG_NEUTRAL
 1                    VERSIONINFO
 FILEVERSION          0,1,0,0

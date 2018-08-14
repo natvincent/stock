@@ -20,8 +20,20 @@ type
     procedure Load(
       const AList: TDataObjectList;
       const ACriteria: string
+    ); overload;
+    function Load(
+      const ADataObject: TDataObject;
+      const AID: integer
+    ): boolean; overload;
+    procedure Save(const AList: TDataObjectList); overload;
+    procedure Save(const ADataObject: TDataObject); overload;
+    procedure SaveObject(
+      const AObject: TDataObject;
+      const ATypeInfo: TRttiType;
+      const AQuery: IQuery
     );
-    procedure Save(const AList: TDataObjectList);
+    procedure LoadProperties(const AInstance: TDataObject;
+      const AProperties: TArray<TRttiProperty>; const AQuery: IQuery);
   public
     constructor Create(
       const AConnectionFactory: IConnectionFactory;
@@ -34,7 +46,8 @@ implementation
 
 uses
   Persistence.Consts,
-  System.TypInfo;
+  System.TypInfo, 
+  System.DateUtils;
 
 { TContext }
 
@@ -49,21 +62,51 @@ begin
   FStatementCache := AStatementCache;
 end;
 
+procedure TContext.LoadProperties(
+  const AInstance: TDataObject;
+  const AProperties: TArray<TRttiProperty>;
+  const AQuery: IQuery
+);
+var
+  LProperty: TRttiProperty;
+  LField: IField;
+begin
+  for LProperty in AProperties do
+  begin
+    if LProperty.Visibility = mvPublished then
+    begin
+      LField := AQuery.FieldByName(LProperty.Name);
+      case LProperty.PropertyType.TypeKind of
+        tkInteger: LProperty.SetValue(AInstance, LField.AsInteger);
+        tkChar,
+        tkString,
+        tkUString,
+        tkWString,
+        tkWideChar: LProperty.SetValue(AInstance, LField.AsString);
+        tkFloat:
+          if (LProperty.PropertyType.Name = 'TDateTime')
+            and (LField.AsString <> '') then
+            LProperty.SetValue(AInstance, ISO8601ToDate(LField.AsString));
+      end;
+    end;
+  end;
+  AInstance.DataState := dsClean;
+end;
+
 procedure TContext.Load(
   const AList: TDataObjectList;
   const ACriteria: string
 );
 var
   LProperties: TArray<TRttiProperty>;
-  LProperty: TRttiProperty;
   LType: TRTTIType;
-  LSQL: string;
   LQuery: IQuery;
   LInstance: TDataObject;
   LStatementBuilder: IStatementBuilder;
 begin
+  AList.Clear;
   LType := FRTTIContext.GetType(AList.ListClass);
-  LProperties := LType.GetDeclaredProperties;
+  LProperties := LType.GetProperties;
 
   LQuery := FConnection.CreateQuery;
   LStatementBuilder := FStatementCache.GetStatement(stSelect, AList.ListClass);
@@ -74,32 +117,125 @@ begin
   while not LQuery.EOF do
   begin
     LInstance := AList.ListClass.Create;
+    LoadProperties(LInstance, LProperties, LQuery);
+    AList.Add(LInstance);
+    LQuery.Next;
+  end;
+end;
+
+function TContext.Load(
+  const ADataObject: TDataObject;
+  const AID: integer
+): boolean;
+var
+  LProperties: TArray<TRttiProperty>;
+  LIdentityProperty: TRttiProperty;
+  LType: TRTTIType;
+  LQuery: IQuery;
+  LStatementBuilder: IStatementBuilder;
+
+  function FindIdentityProperty: TRttiProperty;
+  var
+    LProperty: TRttiProperty;
+  begin
     for LProperty in LProperties do
+      if IsIdentityProperty(LProperty)
+        and (LProperty.PropertyType.TypeKind in [tkInteger, tkInt64]) then
+        Exit(LProperty);
+    raise EDataObjectMustHaveIntegerIdentity.CreateFmt(CMustHaveIntegerIdentityProperty, [ADataObject.ClassName]);
+  end;
+
+begin
+  LType := FRTTIContext.GetType(ADataObject.ClassType);
+  LProperties := LType.GetProperties;
+
+  LQuery := FConnection.CreateQuery;
+  LStatementBuilder := FStatementCache.GetStatement(stSelect, TDataObjectClass(ADataObject.ClassType));
+
+  LIdentityProperty := FindIdentityProperty;
+
+  LStatementBuilder.AddAdditionalWhereAnd(
+    LIdentityProperty.Name + ' = :' + LIdentityProperty.Name
+  );
+
+  LQuery.SQL := LStatementBuilder.Generate;
+
+  LQuery.ParamByName(LIdentityProperty.Name).AsInteger := AID;
+
+  LQuery.Open;
+  result := not LQuery.EOF;
+  if result then
+  begin
+    LoadProperties(
+      ADataObject,
+      LProperties,
+      LQuery
+    );
+  end;
+end;
+
+procedure TContext.Save(const ADataObject: TDataObject);
+var
+  LQuery: IQuery;
+  LTypeInfo: TRttiType;
+begin
+  LTypeInfo := FRTTIContext.GetType(ADataObject.ClassType);
+  LQuery := FConnection.CreateQuery;
+  LQuery.SQL := FStatementCache.GetStatement(
+    CStateToStatementTypeMap[ADataObject.DataState],
+    TDataObjectClass(ADataObject.ClassType)
+  ).Generate;
+  if not ADataObject.IsDirty then Exit;
+  SaveObject(
+    ADataObject,
+    LTypeInfo,
+    LQuery
+  );
+end;
+
+procedure TContext.SaveObject(
+  const AObject: TDataObject;
+  const ATypeInfo: TRttiType;
+  const AQuery: IQuery
+);
+var
+  LProperty: TRttiProperty;
+  LIdentityProperty: TRttiProperty;
+  LParam: IParam;
+begin
+  LIdentityProperty := nil;
+  for LProperty in ATypeInfo.GetProperties do
+  begin
+    if (LProperty.Visibility = mvPublished)
+      and AQuery.FindParam(LProperty.Name, LParam) then
     begin
       case LProperty.PropertyType.TypeKind of
-        tkInteger: LProperty.SetValue(LInstance, LQuery.FieldByName(LProperty.Name).AsInteger);
+        tkInteger: LParam.AsInteger := LProperty.GetValue(AObject).AsInteger;
         tkChar,
         tkString,
         tkUString,
         tkWString,
-        tkWideChar: LProperty.SetValue(LInstance, LQuery.FieldByName(LProperty.Name).AsString);
+        tkWideChar: LParam.AsString := LProperty.GetValue(AObject).AsString;
+        tkFloat:
+          if LProperty.PropertyType.Name = 'TDateTime' then
+            LParam.AsString := DateToISO8601(LProperty.GetValue(AObject).AsExtended);
       end;
     end;
-    LInstance.DataState := dsClean;
-    AList.Add(LInstance);
+    if IsIdentityProperty(LProperty) then
+    begin
+      if Assigned(LIdentityProperty) then
+        raise EOnlyOneIdentityPropertyAllowed.Create(COnlyOneIdentityPropertyAllowed);
+      LIdentityProperty := LProperty;
+    end;
   end;
-end;
 
-function IsIdentityProperty(const AProperty: TRttiProperty): boolean;
-var
-  LAttribute: TCustomAttribute;
-begin
-  for LAttribute in AProperty.GetAttributes do
+  AQuery.Execute;
+
+  if Assigned(LIdentityProperty) then
   begin
-    if LAttribute is TIdentityFieldAttribute then
-      Exit(True);
+    LIdentityProperty.SetValue(AObject, FConnection.GetLastIdentityValue);
   end;
-  result := False;
+  AObject.DataState := dsClean;
 end;
 
 procedure TContext.Save(const AList: TDataObjectList);
@@ -134,54 +270,19 @@ var
     end;
   end;
 
-  procedure SaveObject(const AObject: TDataObject);
-  var
-    LQuery: IQuery;
-    LProperty: TRttiProperty;
-    LIdentityProperty: TRttiProperty;
-    LParam: IParam;
-  begin
-    if not AObject.IsDirty then Exit; //======>
-
-    LQuery := PopulateQuery(CStateToStatementTypeMap[AObject.DataState]);
-
-    for LProperty in LTypeInfo.GetProperties do
-    begin
-      if LProperty.Visibility = mvPublished then
-      begin
-        LParam := LQuery.ParamByName(LProperty.Name);
-        case LProperty.PropertyType.TypeKind of
-          tkInteger: LParam.AsInteger := LProperty.GetValue(AObject).AsInteger;
-          tkChar,
-          tkString,
-          tkUString,
-          tkWString,
-          tkWideChar: LParam.AsString := LProperty.GetValue(AObject).AsString;
-        end;
-        if IsIdentityProperty(LProperty) then
-        begin
-          if Assigned(LIdentityProperty) then
-            raise EOnlyOneIdentityPropertyAllowed.Create(COnlyOneIdentityPropertyAllowed);
-          LIdentityProperty := LProperty;
-        end;
-        AObject.DataState := dsClean;
-      end;
-    end;
-
-    LQuery.Execute;
-
-    if Assigned(LIdentityProperty) then
-    begin
-      LIdentityProperty.SetValue(AObject, FConnection.GetLastIdentityValue);
-    end;
-  end;
-
 begin
   LInsertQuery := nil;
   LUpdateQuery := nil;
   LTypeInfo := FRTTIContext.GetType(AList.ListClass);
   for LObject in AList do
-    SaveObject(LObject);
+  begin
+    if not LObject.IsDirty then Continue;
+    SaveObject(
+      LObject,
+      LTypeInfo,
+      PopulateQuery(CStateToStatementTypeMap[LObject.DataState])
+    );
+  end;
 end;
 
 end.

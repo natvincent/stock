@@ -11,6 +11,9 @@ const
   CTableNameAttributeNotFound = 'The class %s must be decorated with a TableName attribute.';
 
   COnlyOneIdentityPropertyAllowed = 'Only one field per class can be decorated with the "Identity" attribute.';
+  CMustHaveIntegerIdentityProperty = 'The type %s does not have an integer identity column and therefor cannot be loaded.';
+
+  CDatabasePathNotSet = 'You must set the database path on the connection factory before you can create a connection.';
 
 implementation
 

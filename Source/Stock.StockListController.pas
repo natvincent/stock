@@ -14,10 +14,11 @@ type
   private
     FOnListChanged: TNotifyEvent;
     FContext: IContext;
-    FStockList: TStockItemList;
+    FStockList: TStockListItemList;
     function GetOnListChanged: TNotifyEvent;
     procedure SetOnListChanged(const AEvent: TNotifyEvent);
-    function GetStockList: TStockItemList;
+    function GetStockList: TStockListItemList;
+    function GetContext: IContext;
 
     procedure Load;
 
@@ -26,8 +27,7 @@ type
 
   public
     constructor Create(
-      const AContext: IContext;
-      const AStockList: TStockItemList
+      const AContext: IContext
     );
     destructor Destroy; override;
 
@@ -38,13 +38,12 @@ implementation
 { TStockListController }
 
 constructor TStockListController.Create(
-  const AContext: IContext;
-  const AStockList: TStockItemList
+  const AContext: IContext
 );
 begin
   inherited Create;
   FContext := AContext;
-  FStockList := AStockList;
+  FStockList := TStockListItemList.Create;
 end;
 
 destructor TStockListController.Destroy;
@@ -59,12 +58,17 @@ begin
     FOnListChanged(self);
 end;
 
+function TStockListController.GetContext: IContext;
+begin
+  result := FContext;
+end;
+
 function TStockListController.GetOnListChanged: TNotifyEvent;
 begin
   Result := FOnListChanged;
 end;
 
-function TStockListController.GetStockList: TStockItemList;
+function TStockListController.GetStockList: TStockListItemList;
 begin
   result := FStockList;
 end;

@@ -52,12 +52,16 @@ type
     function GetSQL: string;
     procedure SetSQL(const ASQL: string);
     function GetEOF: Boolean;
+    function GetRecordCount: Integer;
 
     procedure Execute;
     procedure Open;
 
+    procedure Next;
+
     function FieldByName(const AName: string): IField;
     function ParamByName(const AName: string): IParam;
+    function FindParam(const AName: string; out AParam: IParam): Boolean;
 
   public
     constructor Create(const AFDQuery: TFDQuery);
@@ -67,11 +71,11 @@ type
 
   TFireDACConnectionFactory = class (TInterfacedObject, IConnectionFactory)
   private
-    FDatabaseFilename: string;
+    FDatabasePath: string;
     function CreateConnection: IConnection;
+    function GetDatabasePath: string;
+    procedure SetDatabasePath(const APath: string);
 
-  public
-    constructor Create(const ADatabaseFilename: string);
   end;
 
   TSQLiteSelectBuilder = class (TStatementBuilder, ISelectBuilder)
@@ -87,9 +91,9 @@ type
     procedure AddField(const AFieldClause: string);
     procedure AddFrom(const ATableName: string);
     procedure AddWhereAnd(const APredicate: string);
-    procedure AddAdditionalWhereAnd(const APredicate: string); override;
 
   protected
+    procedure AddAdditionalWhereAnd(const APredicate: string); override;
     function Generate: string; override;
 
   public
@@ -142,13 +146,17 @@ type
     function CreateInsertBuilder: IUpdateInsertBuilder;
     function CreateSelectBuilder: ISelectBuilder;
     function CreateUpdateBuilder: IUpdateInsertBuilder;
+    function CreateEchoBuilder(
+      const AStatement: string
+    ): IStatementBuilder;
   end;
   
 implementation
 
 uses
   Persistence.Types,
-  Persistence.Consts;
+  Persistence.Consts,
+  System.SysUtils;
 
 { TFireDACQuery }
 
@@ -176,14 +184,42 @@ begin
   );
 end;
 
+function TFireDACQuery.FindParam(const AName: string;
+  out AParam: IParam): Boolean;
+var
+  LIndex: integer;
+  LParam: TFDParam;
+begin
+  for LIndex := 0 to FQuery.Params.Count - 1 do
+  begin
+    LParam := FQuery.Params[LIndex];
+    if SameText(LParam.Name, AName) then
+    begin
+      AParam := TFireDACParam.Create(LParam);
+      Exit(True);
+    end;
+  end;
+  result := False;
+end;
+
 function TFireDACQuery.GetEOF: Boolean;
 begin
   result := FQuery.Eof;
 end;
 
+function TFireDACQuery.GetRecordCount: Integer;
+begin
+  result := FQuery.RecordCount;
+end;
+
 function TFireDACQuery.GetSQL: string;
 begin
   result := FQuery.SQL.Text;
+end;
+
+procedure TFireDACQuery.Next;
+begin
+  FQuery.Next;
 end;
 
 procedure TFireDACQuery.Open;
@@ -268,7 +304,7 @@ end;
 
 function TFireDACConnection.GetLastIdentityValue: Int64;
 begin
-  result := 0;
+  result := Int64(FConnection.GetLastAutoGenValue(''));
 end;
 
 procedure TFireDACConnection.SetDatabase(const AValue: string);
@@ -278,16 +314,22 @@ end;
 
 { TFireDACConnectionFactory }
 
-constructor TFireDACConnectionFactory.Create(const ADatabaseFilename: string);
-begin
-  inherited Create;
-  FDatabaseFilename := ADatabaseFilename;
-end;
-
 function TFireDACConnectionFactory.CreateConnection: IConnection;
 begin
+  if FDatabasePath = '' then
+    raise EDatabasePathNotSet.Create(CDatabasePathNotSet);
   result := TFireDACConnection.Create;
-  result.Database := FDatabaseFilename;
+  result.Database := FDatabasePath;
+end;
+
+function TFireDACConnectionFactory.GetDatabasePath: string;
+begin
+  result := FDatabasePath;
+end;
+
+procedure TFireDACConnectionFactory.SetDatabasePath(const APath: string);
+begin
+  FDatabasePath := APath;
 end;
 
 { TSQLiteSelectBuilder }
@@ -535,6 +577,13 @@ begin
 end;
 
 { TSQLiteStatementBuilderFactory }
+
+function TSQLiteStatementBuilderFactory.CreateEchoBuilder(
+  const AStatement: string
+): IStatementBuilder;
+begin
+  result := TEchoStatementBuilder.Create(AStatement);
+end;
 
 function TSQLiteStatementBuilderFactory.CreateInsertBuilder: IUpdateInsertBuilder;
 begin
