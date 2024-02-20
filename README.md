@@ -1,5 +1,5 @@
 # Stock
-Stock is a simple application written as part of a job application. 
+Stock is a simple application written as a programming challenge for a job. 
 
 Features:
 * Basic ORM, written specifically for this project
